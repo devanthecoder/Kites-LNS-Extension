@@ -49,7 +49,17 @@ static void checkSpecials(const LnsConverter &c)
     CHECK(c.toFloatBits(kPosInf) == 0x7F800000u);
     CHECK(c.toFloatBits(kNegInf) == 0xFF800000u);
     CHECK(c.toFloatBits(kNaN) == 0x7FC00000u);
-    CHECK(c.toFloatBits(0xC0000000u) == 0x7FC00000u); // any field==MIN with S=1 is NaN
+    CHECK(c.toFloatBits(0xBFC00001u) == 0x7FC00000u); // NaN: sign and payload ignored
+    CHECK(c.toFloatBits(0x3FFFFFFFu) == 0x7FC00000u); // any nonzero fraction in the Inf band
+    CHECK(c.toFloatBits(0xC0000000u) == 0u);          // zero field with sign set still reads as 0
+    // Exact word values of the specials (these must match the ALU)
+    CHECK(kPosZero == 0x40000000u && kPosInf == 0x3FC00000u);
+    CHECK(kNegInf == 0xBFC00000u && kNaN == 0x3FC00001u);
+    CHECK(isZero(0xC0000000u) && isNaN(0xBFC00001u) && isInf(0xBFC00000u));
+    CHECK(canonicalize(0xC0000000u) == kPosZero && canonicalize(0xBFC00001u) == kNaN);
+    // Finite limits: just below the Inf band is finite, the band itself is not
+    CHECK(isFinite(pack(false, kLqFiniteMax)) && isFinite(pack(true, kLqFiniteMin)));
+    CHECK(c.toFloatBits(pack(false, kLqFiniteMax)) == 0x7F800000u); // finite in LNS, Inf in FP32
 
     CHECK(c.toInt32(kNaN) == std::numeric_limits<int32_t>::max());
     CHECK(c.toInt32(kPosInf) == std::numeric_limits<int32_t>::max());

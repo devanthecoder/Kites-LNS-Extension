@@ -71,7 +71,6 @@ bool Parser::parse_O_LNS_C_FPR()
         block.setInstructionIndex(instruction_index_);
         block.setRd(canonicalLnsName(peekToken(1).value));
         block.setRs1(reg_alias_to_name.at(peekToken(3).value));
-        block.setRs2("x0");
         skipCurrentLine();
         intermediate_code_.emplace_back(block, true);
         instruction_number_line_number_mapping_[instruction_index_] = block.getLineNumber();
@@ -99,7 +98,6 @@ bool Parser::parse_O_FPR_C_LNS()
         block.setInstructionIndex(instruction_index_);
         block.setRd(reg_alias_to_name.at(peekToken(1).value));
         block.setRs1(canonicalLnsName(peekToken(3).value));
-        block.setRs2("x0");
         skipCurrentLine();
         intermediate_code_.emplace_back(block, true);
         instruction_number_line_number_mapping_[instruction_index_] = block.getLineNumber();

@@ -386,8 +386,12 @@ uint32_t generateLnsTypeMachineCode(const ICUnit &block)
     else
     {
         // R-type: funct7 | rs2 | rs1 | funct3 | rd | opcode
+        // (the two converts leave rs2 empty: the field is fixed to 0)
         machineCode |= (funct7 << 25);
-        machineCode |= (extractRegisterIndex(block.getRs2()) << 20);
+        if (!block.getRs2().empty())
+        {
+            machineCode |= (extractRegisterIndex(block.getRs2()) << 20);
+        }
         machineCode |= (extractRegisterIndex(block.getRs1()) << 15);
         machineCode |= (extractRegisterIndex(block.getRd()) << 7);
     }

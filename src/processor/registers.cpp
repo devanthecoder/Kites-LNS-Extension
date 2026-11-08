@@ -9,6 +9,7 @@
 #include <array>
 #include <cstdint>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -23,6 +24,7 @@ void RegisterFile::Reset()
 {
     gpr_.fill(0);
     fpr_.fill(0.0);
+    lns_.fill(lns::kPosZero);
     csr_.fill(0);
     csr_[0x002] = 0b000; // Default: RNE (IEEE 754)
     emit registerResetSignal();
@@ -63,6 +65,25 @@ void RegisterFile::WriteFpr(size_t reg, uint64_t value)
     emit updateFRegister(reg, value);
 }
 
+uint32_t RegisterFile::ReadLns(size_t reg) const
+{
+    if (reg >= NUM_LNS)
+        throw std::out_of_range("Invalid LNS register index");
+    if (reg == 0)
+        return lns::kPosZero;
+    return lns_[reg];
+}
+
+void RegisterFile::WriteLns(size_t reg, uint32_t value)
+{
+    if (reg >= NUM_LNS)
+        throw std::out_of_range("Invalid LNS register index");
+    if (reg == 0)
+        return;
+    lns_[reg] = value;
+    emit updateLRegister(reg, value);
+}
+
 uint64_t RegisterFile::ReadCsr(size_t reg) const
 {
     if (reg >= NUM_CSR)
@@ -87,8 +108,20 @@ std::vector<uint64_t> RegisterFile::GetFprValues() const
     return {fpr_.begin(), fpr_.end()};
 }
 
+std::vector<uint32_t> RegisterFile::GetLnsValues() const
+{
+    std::vector<uint32_t> values(lns_.begin(), lns_.end());
+    values[0] = lns::kPosZero;
+    return values;
+}
+
 void RegisterFile::ModifyRegister(const std::string &reg_name, uint64_t value)
 {
+    if (const int lns_index = LnsRegisterIndex(reg_name); lns_index >= 0)
+    {
+        WriteLns(static_cast<size_t>(lns_index), static_cast<uint32_t>(value));
+        return;
+    }
     std::string reg_name_n = reg_alias_to_name.at(reg_name);
     if (IsValidGeneralPurposeRegister(reg_name_n))
     {
@@ -129,6 +162,44 @@ const std::unordered_set<std::string> valid_floating_point_registers = {
     "ft13", "ft14", "ft15", "ft16", "ft17", "ft18", "ft19", "ft20", "ft21", "ft22", "ft23",
     "ft24", "ft25", "ft26", "ft27", "ft28", "ft29", "ft30", "ft31",
 };
+
+namespace
+{
+/// ABI names indexed by register number (L0 lzero; L1-L7 lt0-lt6; L8-L9 ls0-ls1; L10-L17 la0-la7;
+/// L18-L27 ls2-ls11; L28-L31 lt7-lt10).
+constexpr const char *kLnsAbiNames[32] = {
+    "lzero", "lt0", "lt1", "lt2", "lt3", "lt4", "lt5", "lt6", "ls0",  "ls1",  "la0",
+    "la1",   "la2", "la3", "la4", "la5", "la6", "la7", "ls2", "ls3",  "ls4",  "ls5",
+    "ls6",   "ls7", "ls8", "ls9", "ls10", "ls11", "lt7", "lt8", "lt9", "lt10",
+};
+
+std::unordered_map<std::string, int> buildLnsNameToIndex()
+{
+    std::unordered_map<std::string, int> names;
+    for (int i = 0; i < 32; ++i)
+    {
+        names.emplace("l" + std::to_string(i), i);
+        names.emplace(kLnsAbiNames[i], i);
+    }
+    return names;
+}
+
+const std::unordered_map<std::string, int> &lnsNameToIndex()
+{
+    static const std::unordered_map<std::string, int> names = buildLnsNameToIndex();
+    return names;
+}
+
+std::unordered_set<std::string> buildValidLnsRegisters()
+{
+    std::unordered_set<std::string> names;
+    for (const auto &entry : lnsNameToIndex())
+        names.insert(entry.first);
+    return names;
+}
+} // namespace
+
+const std::unordered_set<std::string> valid_lns_registers = buildValidLnsRegisters();
 
 const std::unordered_set<std::string> valid_csr_registers = {"fflags", "frm", "fcsr"};
 
@@ -183,6 +254,31 @@ bool IsValidGeneralPurposeRegister(const std::string &reg)
 bool IsValidFloatingPointRegister(const std::string &reg)
 {
     return valid_floating_point_registers.find(reg) != valid_floating_point_registers.end();
+}
+
+bool IsValidLnsRegister(const std::string &reg)
+{
+    return lnsNameToIndex().find(reg) != lnsNameToIndex().end();
+}
+
+int LnsRegisterIndex(const std::string &reg)
+{
+    const auto it = lnsNameToIndex().find(reg);
+    return it == lnsNameToIndex().end() ? -1 : it->second;
+}
+
+std::string LnsRegisterName(size_t index)
+{
+    if (index >= 32)
+        throw std::out_of_range("Invalid LNS register index");
+    return "l" + std::to_string(index);
+}
+
+std::string LnsRegisterAbiName(size_t index)
+{
+    if (index >= 32)
+        throw std::out_of_range("Invalid LNS register index");
+    return kLnsAbiNames[index];
 }
 
 bool IsValidCsr(const std::string &reg)

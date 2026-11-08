@@ -203,6 +203,7 @@ void DumpRegisters(const std::filesystem::path &filename, RegisterFile &register
 
     std::vector<uint64_t> gp_registers = register_file.GetGprValues();
     std::vector<uint64_t> fp_registers = register_file.GetFprValues();
+    std::vector<uint32_t> lns_registers = register_file.GetLnsValues();
 
     std::ofstream file(filename);
     if (!file.is_open())
@@ -266,6 +267,23 @@ void DumpRegisters(const std::filesystem::path &filename, RegisterFile &register
              << std::setfill(' ') << std::dec << "\"";
 
         if (i != fp_registers.size() - 1)
+        {
+            file << ",";
+        }
+        file << "\n";
+    }
+    file << "    },\n";
+
+    file << "    \"lns_registers\": {\n";
+    for (size_t i = 0; i < lns_registers.size(); ++i)
+    {
+        file << "        \"l" << i << "\"";
+        file << std::string((i >= 10 ? 0 : 1), ' ');
+        file << ": \"0x";
+        file << std::hex << std::setw(8) << std::setfill('0') << lns_registers[i] << std::setw(0)
+             << std::setfill(' ') << std::dec << "\"";
+
+        if (i != lns_registers.size() - 1)
         {
             file << ",";
         }

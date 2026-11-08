@@ -1,12 +1,29 @@
 #include "registermodel.h"
 #include "common/register_names.h"
+#include "processor/lns/lns_format.h"
 #include <QApplication>
 #include <QBrush>
 #include <QDebug>
 #include <QPalette>
+#include <cmath>
 
 namespace Kites
 {
+namespace
+{
+// Decimal view of an LNS word: sign * 2^(log / 2^22), with the special values spelled out.
+QString lnsDecimalString(uint32_t word)
+{
+    if (lns::isNaN(word))
+        return QString("nan");
+    if (lns::isInf(word))
+        return QString(lns::signOf(word) ? "-inf" : "inf");
+    if (lns::isZero(word))
+        return QString("0");
+    const double magnitude = std::exp2(static_cast<double>(lns::fieldOf(word)) / lns::kScale);
+    return QString::number(lns::signOf(word) ? -magnitude : magnitude, 'g', 8);
+}
+} // namespace
 
 RegisterModel::RegisterModel(QObject *parent, RegisterFile *regfile) : QAbstractTableModel(parent)
 {
@@ -15,6 +32,8 @@ RegisterModel::RegisterModel(QObject *parent, RegisterFile *regfile) : QAbstract
             &RegisterModel::updateRegisterValue);
     connect(m_currentRegisterFile, &RegisterFile::updateFRegister, this,
             &RegisterModel::updateFRegisterValue);
+    connect(m_currentRegisterFile, &RegisterFile::updateLRegister, this,
+            &RegisterModel::updateLRegisterValue);
     connect(m_currentRegisterFile, &RegisterFile::registerResetSignal, this,
             &RegisterModel::registerResetSlot);
 }
@@ -22,7 +41,7 @@ RegisterModel::RegisterModel(QObject *parent, RegisterFile *regfile) : QAbstract
 int RegisterModel::rowCount(const QModelIndex &parent) const
 {
     Q_UNUSED(parent);
-    return 64;
+    return 96; // x0-x31, f0-f31, l0-l31
 }
 
 int RegisterModel::columnCount(const QModelIndex &parent) const
@@ -85,9 +104,13 @@ QVariant RegisterModel::data(const QModelIndex &index, int role) const
             {
                 return QString("x%1").arg(row);
             }
-            else
+            else if (row < 64)
             {
                 return QString("f%1").arg(row - 32);
+            }
+            else
+            {
+                return QString("l%1").arg(row - 64);
             }
         case 1: // Register Alias
         {
@@ -95,6 +118,8 @@ QVariant RegisterModel::data(const QModelIndex &index, int role) const
                 return QString(register_names::kGprAliases[row]);
             else if (row < 64)
                 return QString(register_names::kFprAliases[row - 32]);
+            else if (row < 96)
+                return QString(register_names::kLnsAliases[row - 64]);
             else
                 return QString("");
         }
@@ -153,10 +178,25 @@ QVariant RegisterModel::data(const QModelIndex &index, int role) const
                 }
                 }
             }
+            else if (row < 96)
+            {
+                const uint32_t word = m_currentRegisterFile->ReadLns(row - 64);
+
+                switch (m_displayBase)
+                {
+                case Base::Binary:
+                    return QString("0b%1").arg(QString::number(word, 2));
+                case Base::Decimal:
+                    return lnsDecimalString(word);
+                case Base::Hexadecimal:
+                    return QString("0x%1").arg(
+                        QString::number(word, 16).toUpper().rightJustified(8, '0'));
+                }
+            }
             else
             {
                 return QString("");
-            } // TODO : add floating point register support
+            }
         }
         default:
             return QVariant{};
@@ -173,6 +213,8 @@ void RegisterModel::changeRegisterFile(RegisterFile *regfile)
             &RegisterModel::updateRegisterValue);
     connect(m_currentRegisterFile, &RegisterFile::updateFRegister, this,
             &RegisterModel::updateFRegisterValue);
+    connect(m_currentRegisterFile, &RegisterFile::updateLRegister, this,
+            &RegisterModel::updateLRegisterValue);
     // maybe we can directly connect it to
     connect(m_currentRegisterFile, &RegisterFile::registerResetSignal, this,
             &RegisterModel::registerResetSlot);
@@ -199,6 +241,14 @@ void RegisterModel::updateFRegisterValue(size_t regIndex, uint64_t value)
     //QModelIndex index = this->index(static_cast<int>(regIndex + 32), 2);
     m_highlightedRegisterIndex = regIndex + 32; // Update highlighted register index
     // emit dataChanged(index,index);
+    beginResetModel();
+    endResetModel();
+}
+
+void RegisterModel::updateLRegisterValue(size_t regIndex, uint32_t value)
+{
+    Q_UNUSED(value);
+    m_highlightedRegisterIndex = regIndex + 64; // Update highlighted register index
     beginResetModel();
     endResetModel();
 }

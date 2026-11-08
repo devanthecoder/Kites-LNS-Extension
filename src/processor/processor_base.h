@@ -48,7 +48,7 @@ enum SyscallCode
 struct RegisterChange
 {
     unsigned int reg_index;
-    unsigned int reg_type; // 0 for GPR, 1 for CSR, 2 for FPR
+    unsigned int reg_type; // 0 for GPR, 1 for CSR, 2 for FPR, 3 for LNS (32-bit words)
     uint64_t old_value;
     uint64_t new_value;
 };

@@ -560,6 +560,11 @@ bool isValidLnsStoreInstruction(const std::string &instruction);
 /// True if the 32-bit instruction word uses the custom-0 opcode (an LNS instruction).
 bool isLnsInstruction(uint32_t instruction);
 
+/// True for a custom-0 word that is a defined LNS instruction: funct7 = 0 for funct3 000-101,
+/// rs2 = 0 for the two converts (funct3 100/101); llw/lsw (110/111) carry an immediate instead.
+/// Other custom-0 words are reserved and execute as no-ops.
+bool isWellFormedLnsInstruction(uint32_t instruction);
+
 bool isFInstruction(const uint32_t &instruction);
 bool isDInstruction(const uint32_t &instruction);
 

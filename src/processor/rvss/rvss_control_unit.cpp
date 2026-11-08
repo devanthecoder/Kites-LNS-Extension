@@ -5,6 +5,7 @@
  */
 
 #include "processor/rvss/rvss_control_unit.h"
+#include "common/instructions.h"
 #include "processor/alu.h"
 
 #include <cstdint>
@@ -130,6 +131,31 @@ void RVSSControlUnit::SetControlSignals(uint32_t instruction)
     {
         reg_write_ = true;
         alu_op_ = true;
+        break;
+    }
+
+    case 0b0001011:
+    { // custom-0: LNS extension (reserved encodings leave every signal low, i.e. a no-op)
+        if (!instruction_set::isWellFormedLnsInstruction(instruction))
+        {
+            break;
+        }
+        switch ((instruction >> 12) & 0b111)
+        {
+        case 0b110: // LLW
+            alu_src_ = true;
+            mem_to_reg_ = true;
+            reg_write_ = true;
+            mem_read_ = true;
+            break;
+        case 0b111: // LSW
+            alu_src_ = true;
+            mem_write_ = true;
+            break;
+        default: // ladd, lsub, lmul, ldiv, fcvt.lns.s, fcvt.s.lns
+            reg_write_ = true;
+            break;
+        }
         break;
     }
 

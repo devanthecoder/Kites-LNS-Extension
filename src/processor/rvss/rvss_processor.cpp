@@ -9,6 +9,9 @@
 #include "common/instructions.h"
 #include "config/config.h"
 #include "common/globals.h"
+#include "processor/lns/lns_alu.h"
+#include "processor/lns/lns_conversion.h"
+#include "processor/lns/lns_format.h"
 #include "ui/processor_tab/processor_designs/rvss_processor_circuit_scene.h"
 #include "utils/utils.h"
 #include <QDebug>
@@ -181,6 +184,12 @@ void RVSSProcessor::Execute()
     if (opcode == 0b1110011 && funct3 == 0b000)
     {
         HandleSyscall();
+        return;
+    }
+
+    if (instruction_set::isLnsInstruction(current_instruction_))
+    { // custom-0: LNS extension
+        ExecuteLns();
         return;
     }
 
@@ -395,6 +404,58 @@ void RVSSProcessor::ExecuteDouble()
         control_unit_.GetAluSignal(current_instruction_, control_unit_.GetAluOp());
     std::tie(execution_result_, fcsr_status) =
         alu::Alu::dfpexecute(aluOperation, reg1_value, reg2_value, reg3_value, rm);
+}
+
+void RVSSProcessor::ExecuteLns()
+{
+    execution_result_ = 0;
+    if (!instruction_set::isWellFormedLnsInstruction(current_instruction_))
+    {
+        return; // reserved custom-0 encoding: no-op
+    }
+
+    const uint8_t funct3 = (current_instruction_ >> 12) & 0b111;
+    const uint8_t rs1 = (current_instruction_ >> 15) & 0b11111;
+    const uint8_t rs2 = (current_instruction_ >> 20) & 0b11111;
+
+    switch (funct3)
+    {
+    case 0b000: // LADD
+    case 0b001: // LSUB
+    case 0b010: // LMUL
+    case 0b011: // LDIV
+    {
+        static constexpr lns::LnsAluOp ops[] = {lns::LnsAluOp::ADD, lns::LnsAluOp::SUB,
+                                                lns::LnsAluOp::MUL, lns::LnsAluOp::DIV};
+        execution_result_ = static_cast<int64_t>(lns::defaultAlu().execute(
+            ops[funct3], registers_.ReadLns(rs1), registers_.ReadLns(rs2)));
+        break;
+    }
+    case 0b100: // FCVT.LNS.S: FP32 in the low 32 bits of f[rs1] -> LNS
+        execution_result_ = static_cast<int64_t>(lns::defaultConverter().fromFloatBits(
+            static_cast<uint32_t>(registers_.ReadFpr(rs1) & 0xFFFFFFFF)));
+        break;
+    case 0b101: // FCVT.S.LNS: LNS -> FP32, zero-extended into f[rd]
+        execution_result_ = static_cast<int64_t>(
+            lns::defaultConverter().toFloatBits(registers_.ReadLns(rs1)));
+        break;
+    case 0b110: // LLW: address = x[rs1] + sext(imm[11:0])
+    {
+        const int32_t imm = static_cast<int32_t>(current_instruction_) >> 20;
+        execution_result_ = static_cast<int64_t>(registers_.ReadGpr(rs1) + static_cast<int64_t>(imm));
+        break;
+    }
+    case 0b111: // LSW: address = x[rs1] + sext({imm[11:5], imm[4:0]})
+    {
+        const int32_t imm = (static_cast<int32_t>(current_instruction_ & 0xFE000000) >> 20) |
+                            static_cast<int32_t>((current_instruction_ >> 7) & 0b11111);
+        execution_result_ = static_cast<int64_t>(registers_.ReadGpr(rs1) + static_cast<int64_t>(imm));
+        (void)rs2;
+        break;
+    }
+    default:
+        break;
+    }
 }
 
 void RVSSProcessor::ExecuteCsr()
@@ -631,6 +692,12 @@ void RVSSProcessor::WriteMemory()
         return;
     }
 
+    if (instruction_set::isLnsInstruction(current_instruction_))
+    { // custom-0: LNS extension
+        WriteMemoryLns();
+        return;
+    }
+
     if (instruction_set::isFInstruction(current_instruction_))
     { // RV64 F
         WriteMemoryFloat();
@@ -791,6 +858,39 @@ void RVSSProcessor::WriteMemoryFloat()
     }
 }
 
+void RVSSProcessor::WriteMemoryLns()
+{
+    const uint8_t rs2 = (current_instruction_ >> 20) & 0b11111;
+
+    if (control_unit_.GetMemRead())
+    { // LLW: raw 32-bit word
+        memory_result_ = static_cast<int64_t>(memory_controller_.readWord(execution_result_));
+    }
+
+    uint64_t addr = 0;
+    std::vector<uint8_t> old_bytes_vec;
+    std::vector<uint8_t> new_bytes_vec;
+
+    if (control_unit_.GetMemWrite())
+    { // LSW: raw 32-bit word
+        addr = execution_result_;
+        for (size_t i = 0; i < 4; ++i)
+        {
+            old_bytes_vec.push_back(memory_controller_.peekByte(addr + i));
+        }
+        memory_controller_.writeWord(execution_result_, registers_.ReadLns(rs2));
+        for (size_t i = 0; i < 4; ++i)
+        {
+            new_bytes_vec.push_back(memory_controller_.peekByte(addr + i));
+        }
+    }
+
+    if (old_bytes_vec != new_bytes_vec)
+    {
+        current_delta_.memory_changes.push_back({addr, old_bytes_vec, new_bytes_vec});
+    }
+}
+
 void RVSSProcessor::WriteMemoryDouble()
 {
     uint8_t rs2 = (current_instruction_ >> 20) & 0b11111;
@@ -833,6 +933,12 @@ void RVSSProcessor::WriteBack()
 
     if (opcode == 0b1110011 && funct3 == 0b000)
     {
+        return;
+    }
+
+    if (instruction_set::isLnsInstruction(current_instruction_))
+    { // custom-0: LNS extension
+        WriteBackLns();
         return;
     }
 
@@ -948,6 +1054,41 @@ void RVSSProcessor::WriteBackFloat()
     if (old_reg != new_reg)
     {
         current_delta_.register_changes.push_back({reg_index, reg_type, old_reg, new_reg});
+    }
+}
+
+void RVSSProcessor::WriteBackLns()
+{
+    if (!control_unit_.GetRegWrite())
+    {
+        return; // lsw, or a reserved custom-0 encoding
+    }
+
+    const uint8_t funct3 = (current_instruction_ >> 12) & 0b111;
+    const uint8_t rd = (current_instruction_ >> 7) & 0b11111;
+
+    uint64_t old_reg = 0;
+    uint64_t new_reg = 0;
+    unsigned int reg_type = 3; // LNS
+
+    if (funct3 == 0b101)
+    { // FCVT.S.LNS writes an FP32 value into an FPR
+        reg_type = 2;
+        old_reg = registers_.ReadFpr(rd);
+        registers_.WriteFpr(rd, static_cast<uint64_t>(execution_result_) & 0xFFFFFFFF);
+        new_reg = registers_.ReadFpr(rd);
+    }
+    else
+    {
+        const int64_t value = (funct3 == 0b110) ? memory_result_ : execution_result_;
+        old_reg = registers_.ReadLns(rd);
+        registers_.WriteLns(rd, static_cast<uint32_t>(static_cast<uint64_t>(value) & 0xFFFFFFFF));
+        new_reg = registers_.ReadLns(rd); // l0 ignores the write
+    }
+
+    if (old_reg != new_reg)
+    {
+        current_delta_.register_changes.push_back({rd, reg_type, old_reg, new_reg});
     }
 }
 
@@ -1237,6 +1378,11 @@ void RVSSProcessor::Undo()
             registers_.WriteFpr(change.reg_index, change.old_value);
             break;
         }
+        case 3:
+        { // LNS
+            registers_.WriteLns(change.reg_index, static_cast<uint32_t>(change.old_value));
+            break;
+        }
         default:
             std::cerr << "Invalid register type: " << change.reg_type << std::endl;
             break;
@@ -1307,6 +1453,11 @@ void RVSSProcessor::Redo()
         case 2:
         { // FPR
             registers_.WriteFpr(change.reg_index, change.new_value);
+            break;
+        }
+        case 3:
+        { // LNS
+            registers_.WriteLns(change.reg_index, static_cast<uint32_t>(change.new_value));
             break;
         }
         default:

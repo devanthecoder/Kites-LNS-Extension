@@ -1156,6 +1156,20 @@ bool isLnsInstruction(uint32_t instruction)
     return (instruction & 0x7F) == kLnsOpcode;
 }
 
+bool isWellFormedLnsInstruction(uint32_t instruction)
+{
+    if (!isLnsInstruction(instruction))
+        return false;
+    const uint32_t funct3 = (instruction >> 12) & 0b111;
+    const uint32_t rs2 = (instruction >> 20) & 0b11111;
+    const uint32_t funct7 = (instruction >> 25) & 0b1111111;
+    if (funct3 >= 0b110)
+        return true; // llw / lsw
+    if (funct7 != 0)
+        return false;
+    return funct3 <= 0b011 || rs2 == 0;
+}
+
 bool isValidFDSTypeInstruction(const std::string &instruction)
 {
     return (FDExtensionSTypeInstructions.find(instruction) != FDExtensionSTypeInstructions.end());

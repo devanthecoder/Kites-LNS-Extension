@@ -18,6 +18,7 @@ namespace Kites
 {
 RegisterFile::RegisterFile(QObject *parent) : QObject(parent)
 {
+    lns_.fill(lns::kPosZero); // LNS: all-zero bits would be +1.0
 }
 
 void RegisterFile::Reset()

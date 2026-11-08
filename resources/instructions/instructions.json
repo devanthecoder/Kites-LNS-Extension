@@ -70,6 +70,14 @@
     ],
 
     "FInstruction": [
+        "ladd",
+        "lsub",
+        "lmul",
+        "ldiv",
+        "fcvt.lns.s",
+        "fcvt.s.lns",
+        "llw",
+        "lsw",
         "flw",
         "fsw",
         "fmadd.s",

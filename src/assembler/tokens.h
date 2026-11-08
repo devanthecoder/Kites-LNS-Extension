@@ -36,6 +36,7 @@ enum class TokenType
     RPAREN,       ///< Right parenthesis ')'
     STRING,       ///< String literal
     RM,           ///< Rounding mode
+    LNS_REGISTER, ///< LNS register (l0-l31, lzero, lt*, ls*, la*)
 };
 
 /**

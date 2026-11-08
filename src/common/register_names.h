@@ -30,5 +30,17 @@ inline constexpr std::array<const char *, 32> kFprAliases = {
     "fa2", "fa3", "fa4", "fa5", "fa6", "fa7", "fs2", "fs3", "fs4", "fs5", "fs6", "fs7",
     "fs8", "fs9", "fs10", "fs11", "ft8", "ft9", "ft10", "ft11"};
 
+// l0-l31 canonical names (LNS registers).
+inline constexpr std::array<const char *, 32> kLnsNames = {
+    "l0",  "l1",  "l2",  "l3",  "l4",  "l5",  "l6",  "l7",  "l8",  "l9",  "l10",
+    "l11", "l12", "l13", "l14", "l15", "l16", "l17", "l18", "l19", "l20", "l21",
+    "l22", "l23", "l24", "l25", "l26", "l27", "l28", "l29", "l30", "l31"};
+
+// l0-l31 ABI aliases, index-matched with kLnsNames.
+inline constexpr std::array<const char *, 32> kLnsAliases = {
+    "lzero", "lt0", "lt1", "lt2", "lt3", "lt4", "lt5", "lt6", "ls0", "ls1", "la0",
+    "la1",   "la2", "la3", "la4", "la5", "la6", "la7", "ls2", "ls3", "ls4", "ls5",
+    "ls6",   "ls7", "ls8", "ls9", "ls10", "ls11", "lt7", "lt8", "lt9", "lt10"};
+
 } // namespace register_names
 } // namespace Kites

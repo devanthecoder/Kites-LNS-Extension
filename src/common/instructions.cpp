@@ -186,6 +186,16 @@ std::unordered_map<Instruction, InstructionEncoding> instruction_encoding_map = 
     {Instruction::kfnmsub_d, {0b1001011, 0b01, -1, -1, -1, -1}},
     {Instruction::kfnmadd_d, {0b1001111, 0b01, -1, -1, -1, -1}},
 
+    // LNS extension (custom-0)
+    {Instruction::kladd, {0b0001011, -1, 0b000, -1, -1, 0b0000000}},
+    {Instruction::klsub, {0b0001011, -1, 0b001, -1, -1, 0b0000000}},
+    {Instruction::klmul, {0b0001011, -1, 0b010, -1, -1, 0b0000000}},
+    {Instruction::kldiv, {0b0001011, -1, 0b011, -1, -1, 0b0000000}},
+    {Instruction::kfcvt_lns_s, {0b0001011, -1, 0b100, -1, -1, 0b0000000}},
+    {Instruction::kfcvt_s_lns, {0b0001011, -1, 0b101, -1, -1, 0b0000000}},
+    {Instruction::kllw, {0b0001011, -1, 0b110, -1, -1, -1}},
+    {Instruction::klsw, {0b0001011, -1, 0b111, -1, -1, -1}},
+
 };
 
 std::unordered_map<std::string, Instruction> instruction_string_map = {
@@ -346,7 +356,16 @@ std::unordered_map<std::string, Instruction> instruction_string_map = {
     {"flw", Instruction::kflw},
     {"fsw", Instruction::kfsw},
     {"fld", Instruction::kfld},
-    {"fsd", Instruction::kfsd}
+    {"fsd", Instruction::kfsd},
+
+    {"ladd", Instruction::kladd},
+    {"lsub", Instruction::klsub},
+    {"lmul", Instruction::klmul},
+    {"ldiv", Instruction::kldiv},
+    {"fcvt.lns.s", Instruction::kfcvt_lns_s},
+    {"fcvt.s.lns", Instruction::kfcvt_s_lns},
+    {"llw", Instruction::kllw},
+    {"lsw", Instruction::klsw}
 
 };
 
@@ -375,7 +394,10 @@ static const std::unordered_set<std::string> valid_instructions = {
     "fld", "fsd", "fmadd.d", "fmsub.d", "fnmsub.d", "fnmadd.d", "fadd.d", "fsub.d", "fmul.d",
     "fdiv.d", "fsqrt.d", "fsgnj.d", "fsgnjn.d", "fsgnjx.d", "fmin.d", "fmax.d", "fcvt.s.d",
     "fcvt.d.s", "feq.d", "flt.d", "fle.d", "fclass.d", "fcvt.w.d", "fcvt.wu.d", "fcvt.d.w",
-    "fcvt.d.wu", "fcvt.l.d", "fcvt.lu.d", "fmv.x.d", "fcvt.d.l", "fcvt.d.lu", "fmv.d.x"
+    "fcvt.d.wu", "fcvt.l.d", "fcvt.lu.d", "fmv.x.d", "fcvt.d.l", "fcvt.d.lu", "fmv.d.x",
+
+    // LNS extension
+    "ladd", "lsub", "lmul", "ldiv", "fcvt.lns.s", "fcvt.s.lns", "llw", "lsw"
 
 };
 
@@ -515,6 +537,21 @@ static const std::unordered_set<std::string> DExtensionInstructions = {
     "fsgnjn.d", "fsgnjx.d", "fmin.d",    "fmax.d",   "fcvt.s.d",  "fcvt.d.s",
     "feq.d",    "flt.d",    "fle.d",     "fclass.d", "fcvt.w.d",  "fcvt.wu.d",
     "fmv.x.d",  "fcvt.l.d", "fcvt.lu.d", "fcvt.d.l", "fcvt.d.lu",
+};
+
+static const std::unordered_set<std::string> LnsInstructions = {
+    "ladd", "lsub", "lmul", "ldiv", "fcvt.lns.s", "fcvt.s.lns", "llw", "lsw",
+};
+
+std::unordered_map<std::string, LnsInstructionEncoding> lns_instruction_encoding_map = {
+    {"ladd", {kLnsOpcode, 0b000, 0b0000000}},       // O_LNS_C_LNS_C_LNS
+    {"lsub", {kLnsOpcode, 0b001, 0b0000000}},       // O_LNS_C_LNS_C_LNS
+    {"lmul", {kLnsOpcode, 0b010, 0b0000000}},       // O_LNS_C_LNS_C_LNS
+    {"ldiv", {kLnsOpcode, 0b011, 0b0000000}},       // O_LNS_C_LNS_C_LNS
+    {"fcvt.lns.s", {kLnsOpcode, 0b100, 0b0000000}}, // O_LNS_C_FPR (rs2 = 0)
+    {"fcvt.s.lns", {kLnsOpcode, 0b101, 0b0000000}}, // O_FPR_C_LNS (rs2 = 0)
+    {"llw", {kLnsOpcode, 0b110, 0b0000000}},        // O_LNS_C_I_LP_GPR_RP (I-type)
+    {"lsw", {kLnsOpcode, 0b111, 0b0000000}},        // O_LNS_C_I_LP_GPR_RP (S-type)
 };
 
 std::unordered_map<std::string, RTypeInstructionEncoding> R_type_instruction_encoding_map = {
@@ -979,6 +1016,16 @@ std::unordered_map<std::string, std::vector<SyntaxType>> instruction_syntax_map 
                                             // from an x (integer) register into an f
                                             // (floating-point) register without conversion
 
+    // LNS extension (custom-0)
+    {"ladd", {SyntaxType::O_LNS_C_LNS_C_LNS}},
+    {"lsub", {SyntaxType::O_LNS_C_LNS_C_LNS}},
+    {"lmul", {SyntaxType::O_LNS_C_LNS_C_LNS}},
+    {"ldiv", {SyntaxType::O_LNS_C_LNS_C_LNS}},
+    {"fcvt.lns.s", {SyntaxType::O_LNS_C_FPR}}, // FP32 in f-register -> LNS
+    {"fcvt.s.lns", {SyntaxType::O_FPR_C_LNS}}, // LNS -> FP32 in f-register
+    {"llw", {SyntaxType::O_LNS_C_I_LP_GPR_RP}},
+    {"lsw", {SyntaxType::O_LNS_C_I_LP_GPR_RP}},
+
 };
 
 bool isValidInstruction(const std::string &instruction)
@@ -1087,6 +1134,26 @@ bool isValidFDR4TypeInstruction(const std::string &instruction)
 bool isValidFDITypeInstruction(const std::string &instruction)
 {
     return (FDExtensionITypeInstructions.find(instruction) != FDExtensionITypeInstructions.end());
+}
+
+bool isValidLnsInstruction(const std::string &instruction)
+{
+    return LnsInstructions.find(instruction) != LnsInstructions.end();
+}
+
+bool isValidLnsLoadInstruction(const std::string &instruction)
+{
+    return instruction == "llw";
+}
+
+bool isValidLnsStoreInstruction(const std::string &instruction)
+{
+    return instruction == "lsw";
+}
+
+bool isLnsInstruction(uint32_t instruction)
+{
+    return (instruction & 0x7F) == kLnsOpcode;
 }
 
 bool isValidFDSTypeInstruction(const std::string &instruction)
@@ -1281,6 +1348,10 @@ std::string getExpectedSyntaxes(const std::string &opcode)
         {SyntaxType::O_GPR_C_FPR_C_RM, "<gp-reg>, <fp-reg>, <rm>"},
         {SyntaxType::O_GPR_C_FPR_C_FPR, "<gp-reg>, <fp-reg>, <fp-reg>"},
         {SyntaxType::O_FPR_C_I_LP_GPR_RP, "<fp-reg>, <imm>(<gp-reg>)"},
+        {SyntaxType::O_LNS_C_LNS_C_LNS, "<lns-reg>, <lns-reg>, <lns-reg>"},
+        {SyntaxType::O_LNS_C_FPR, "<lns-reg>, <fp-reg>"},
+        {SyntaxType::O_FPR_C_LNS, "<fp-reg>, <lns-reg>"},
+        {SyntaxType::O_LNS_C_I_LP_GPR_RP, "<lns-reg>, <imm>(<gp-reg>)"},
     };
 
     std::string syntaxes;
@@ -1340,6 +1411,8 @@ InstructionType getInstructionType(const std::string &instruction)
         return InstructionType::F_TYPE;
     if (isValidFDSTypeInstruction(instruction))
         return InstructionType::F_TYPE;
+    if (isValidLnsInstruction(instruction))
+        return InstructionType::LNS_TYPE;
     // if (isValidBaseExtensionInstruction(instruction))
     //     return InstructionType::BASE_EXT;
 
@@ -1364,6 +1437,7 @@ std::string disassemble(uint32_t instruction)
 
     auto xr = [](uint8_t r) { return "x" + std::to_string(r); };
     auto fr = [](uint8_t r) { return "f" + std::to_string(r); };
+    auto lr = [](uint8_t r) { return "l" + std::to_string(r); };
     auto signext = [](int32_t v, int b) -> int32_t { return (v << (32 - b)) >> (32 - b); };
 
     auto immI = [&] { return signext((int32_t)(instruction >> 20), 12); };
@@ -1392,6 +1466,38 @@ std::string disassemble(uint32_t instruction)
 
     switch (opcode)
     {
+
+    case 0b0001011:
+    { // custom-0: LNS extension
+        const int32_t offI = signext((int32_t)(instruction >> 20), 12);
+        const int32_t offS = signext((funct7 << 5) | rd, 12);
+        switch (funct3)
+        {
+        case 0b000:
+        case 0b001:
+        case 0b010:
+        case 0b011:
+        {
+            if (funct7 != 0)
+                break;
+            static const char *const names[] = {"ladd", "lsub", "lmul", "ldiv"};
+            return std::string(names[funct3]) + " " + lr(rd) + ", " + lr(rs1) + ", " + lr(rs2);
+        }
+        case 0b100:
+            if (funct7 != 0 || rs2 != 0)
+                break;
+            return "fcvt.lns.s " + lr(rd) + ", " + fr(rs1);
+        case 0b101:
+            if (funct7 != 0 || rs2 != 0)
+                break;
+            return "fcvt.s.lns " + fr(rd) + ", " + lr(rs1);
+        case 0b110:
+            return "llw " + lr(rd) + ", " + std::to_string(offI) + "(" + xr(rs1) + ")";
+        case 0b111:
+            return "lsw " + lr(rs2) + ", " + std::to_string(offS) + "(" + xr(rs1) + ")";
+        }
+        break;
+    }
 
     case 0b0110011:
     { // R-type integer

@@ -186,7 +186,17 @@ enum class Instruction
     kfmv_x_d,
     kfcvt_d_l,
     kfcvt_d_lu,
-    kfmv_d_x
+    kfmv_d_x,
+
+    // LNS extension (custom-0 opcode)
+    kladd,
+    klsub,
+    klmul,
+    kldiv,
+    kfcvt_lns_s,
+    kfcvt_s_lns,
+    kllw,
+    klsw
 };
 
 // TODO: use enum class for instruction encoding
@@ -409,6 +419,27 @@ struct FDSTypeInstructionEncoding
     }
 };
 
+/// custom-0 major opcode, used by all LNS instructions.
+inline constexpr unsigned int kLnsOpcode = 0b0001011;
+
+/**
+ * @brief Encoding of an LNS instruction (custom-0 opcode).
+ *
+ * funct3 selects the instruction: 000 ladd, 001 lsub, 010 lmul, 011 ldiv, 100 fcvt.lns.s,
+ * 101 fcvt.s.lns, 110 llw (I-type), 111 lsw (S-type). funct7 is 0 for all of them.
+ */
+struct LnsInstructionEncoding
+{
+    std::bitset<7> opcode;
+    std::bitset<3> funct3;
+    std::bitset<7> funct7;
+
+    LnsInstructionEncoding(unsigned int opcode, unsigned int funct3, unsigned int funct7)
+        : opcode(opcode), funct3(funct3), funct7(funct7)
+    {
+    }
+};
+
 /**
  * @brief Enum that represents different syntax types for instructions.
  */
@@ -448,6 +479,11 @@ enum class SyntaxType
                          ///< floating-point-register
     O_FPR_C_I_LP_GPR_RP, ///< Opcode floating-point-register , immediate , lparen ( general-register
                          ///< ) rparen
+
+    O_LNS_C_LNS_C_LNS,   ///< Opcode lns-register , lns-register , lns-register
+    O_LNS_C_FPR,         ///< Opcode lns-register , floating-point-register
+    O_FPR_C_LNS,         ///< Opcode floating-point-register , lns-register
+    O_LNS_C_I_LP_GPR_RP, ///< Opcode lns-register , immediate , lparen ( general-register ) rparen
 };
 
 extern std::unordered_map<std::string, RTypeInstructionEncoding> R_type_instruction_encoding_map;
@@ -477,6 +513,8 @@ extern std::unordered_map<std::string, FDITypeInstructionEncoding>
     F_D_I_type_instruction_encoding_map;
 extern std::unordered_map<std::string, FDSTypeInstructionEncoding>
     F_D_S_type_instruction_encoding_map;
+
+extern std::unordered_map<std::string, LnsInstructionEncoding> lns_instruction_encoding_map;
 
 /**
  * @brief A map that associates instruction names with their expected syntax.
@@ -512,6 +550,15 @@ bool isValidFDR3TypeInstruction(const std::string &instruction);
 bool isValidFDR4TypeInstruction(const std::string &instruction);
 bool isValidFDITypeInstruction(const std::string &instruction);
 bool isValidFDSTypeInstruction(const std::string &instruction);
+
+bool isValidLnsInstruction(const std::string &instruction);
+/// True for the I-type LNS load (llw).
+bool isValidLnsLoadInstruction(const std::string &instruction);
+/// True for the S-type LNS store (lsw).
+bool isValidLnsStoreInstruction(const std::string &instruction);
+
+/// True if the 32-bit instruction word uses the custom-0 opcode (an LNS instruction).
+bool isLnsInstruction(uint32_t instruction);
 
 bool isFInstruction(const uint32_t &instruction);
 bool isDInstruction(const uint32_t &instruction);

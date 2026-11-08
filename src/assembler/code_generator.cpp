@@ -358,6 +358,42 @@ uint32_t generateFDSTypeMachineCode(const ICUnit &block)
     return machineCode;
 }
 
+uint32_t generateLnsTypeMachineCode(const ICUnit &block)
+{
+    const auto &encoding = instruction_set::lns_instruction_encoding_map.at(block.getOpcode());
+    const uint32_t funct3 = encoding.funct3.to_ulong();
+    const uint32_t funct7 = encoding.funct7.to_ulong();
+    const uint32_t opcode = encoding.opcode.to_ulong();
+    uint32_t machineCode = opcode | (funct3 << 12);
+
+    if (instruction_set::isValidLnsLoadInstruction(block.getOpcode()))
+    {
+        // I-type: imm[11:0] | rs1 | funct3 | rd | opcode
+        const uint32_t imm = static_cast<uint32_t>(std::stoi(block.getImm())) & 0xFFF;
+        machineCode |= (imm << 20);
+        machineCode |= (extractRegisterIndex(block.getRs1()) << 15);
+        machineCode |= (extractRegisterIndex(block.getRd()) << 7);
+    }
+    else if (instruction_set::isValidLnsStoreInstruction(block.getOpcode()))
+    {
+        // S-type: imm[11:5] | rs2 | rs1 | funct3 | imm[4:0] | opcode
+        const uint32_t imm = static_cast<uint32_t>(std::stoi(block.getImm())) & 0xFFF;
+        machineCode |= ((imm >> 5) << 25);
+        machineCode |= (extractRegisterIndex(block.getRs2()) << 20);
+        machineCode |= (extractRegisterIndex(block.getRs1()) << 15);
+        machineCode |= ((imm & 0b11111) << 7);
+    }
+    else
+    {
+        // R-type: funct7 | rs2 | rs1 | funct3 | rd | opcode
+        machineCode |= (funct7 << 25);
+        machineCode |= (extractRegisterIndex(block.getRs2()) << 20);
+        machineCode |= (extractRegisterIndex(block.getRs1()) << 15);
+        machineCode |= (extractRegisterIndex(block.getRd()) << 7);
+    }
+    return machineCode;
+}
+
 std::vector<uint32_t>
 generateMachineCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCode)
 {
@@ -433,6 +469,10 @@ generateMachineCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCode
         else if (instruction_set::isValidFDSTypeInstruction(block.getOpcode()))
         {
             code = generateFDSTypeMachineCode(block);
+        }
+        else if (instruction_set::isValidLnsInstruction(block.getOpcode()))
+        {
+            code = generateLnsTypeMachineCode(block);
         }
         else
         {

@@ -482,6 +482,30 @@ void Parser::parseTextDirective()
                     break;
                 }
 
+                case instruction_set::SyntaxType::O_LNS_C_LNS_C_LNS:
+                {
+                    valid_syntax = parse_O_LNS_C_LNS_C_LNS();
+                    break;
+                }
+
+                case instruction_set::SyntaxType::O_LNS_C_FPR:
+                {
+                    valid_syntax = parse_O_LNS_C_FPR();
+                    break;
+                }
+
+                case instruction_set::SyntaxType::O_FPR_C_LNS:
+                {
+                    valid_syntax = parse_O_FPR_C_LNS();
+                    break;
+                }
+
+                case instruction_set::SyntaxType::O_LNS_C_I_LP_GPR_RP:
+                {
+                    valid_syntax = parse_O_LNS_C_I_LP_GPR_RP();
+                    break;
+                }
+
                 default:
                 {
                     break;

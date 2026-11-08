@@ -60,6 +60,8 @@ std::string tokenTypeToString(TokenType type)
         return "STRING      ";
     case TokenType::RM:
         return "RM          ";
+    case TokenType::LNS_REGISTER:
+        return "LNS_REGISTER   ";
     default:
         return "UNKNOWN     ";
     }

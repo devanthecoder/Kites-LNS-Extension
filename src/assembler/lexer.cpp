@@ -134,6 +134,10 @@ Token Lexer::identifier()
     {
         return {TokenType::FP_REGISTER, value, line_number_, start_column};
     }
+    if (IsValidLnsRegister(value))
+    {
+        return {TokenType::LNS_REGISTER, value, line_number_, start_column};
+    }
     if (IsValidCsr(value))
     {
         return {TokenType::CSR_REGISTER, value, line_number_, start_column};

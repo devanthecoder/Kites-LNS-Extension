@@ -195,6 +195,8 @@ std::unordered_map<Instruction, InstructionEncoding> instruction_encoding_map = 
     {Instruction::kfcvt_s_lns, {0b0001011, -1, 0b101, -1, -1, 0b0000000}},
     {Instruction::kllw, {0b0001011, -1, 0b110, -1, -1, -1}},
     {Instruction::klsw, {0b0001011, -1, 0b111, -1, -1, -1}},
+    {Instruction::kladdc, {0b0001011, -1, 0b000, -1, -1, 0b0000001}},
+    {Instruction::klsubc, {0b0001011, -1, 0b001, -1, -1, 0b0000001}},
 
 };
 
@@ -365,7 +367,9 @@ std::unordered_map<std::string, Instruction> instruction_string_map = {
     {"fcvt.lns.s", Instruction::kfcvt_lns_s},
     {"fcvt.s.lns", Instruction::kfcvt_s_lns},
     {"llw", Instruction::kllw},
-    {"lsw", Instruction::klsw}
+    {"lsw", Instruction::klsw},
+    {"laddc", Instruction::kladdc},
+    {"lsubc", Instruction::klsubc}
 
 };
 
@@ -397,7 +401,8 @@ static const std::unordered_set<std::string> valid_instructions = {
     "fcvt.d.wu", "fcvt.l.d", "fcvt.lu.d", "fmv.x.d", "fcvt.d.l", "fcvt.d.lu", "fmv.d.x",
 
     // LNS extension
-    "ladd", "lsub", "lmul", "ldiv", "fcvt.lns.s", "fcvt.s.lns", "llw", "lsw"
+    "ladd", "lsub", "lmul", "ldiv", "fcvt.lns.s", "fcvt.s.lns", "llw", "lsw", "laddc",
+    "lsubc"
 
 };
 
@@ -540,7 +545,8 @@ static const std::unordered_set<std::string> DExtensionInstructions = {
 };
 
 static const std::unordered_set<std::string> LnsInstructions = {
-    "ladd", "lsub", "lmul", "ldiv", "fcvt.lns.s", "fcvt.s.lns", "llw", "lsw",
+    "ladd", "lsub", "lmul", "ldiv", "fcvt.lns.s", "fcvt.s.lns", "llw", "lsw", "laddc",
+    "lsubc",
 };
 
 std::unordered_map<std::string, LnsInstructionEncoding> lns_instruction_encoding_map = {
@@ -552,6 +558,8 @@ std::unordered_map<std::string, LnsInstructionEncoding> lns_instruction_encoding
     {"fcvt.s.lns", {kLnsOpcode, 0b101, 0b0000000}}, // O_FPR_C_LNS (rs2 = 0)
     {"llw", {kLnsOpcode, 0b110, 0b0000000}},        // O_LNS_C_I_LP_GPR_RP (I-type)
     {"lsw", {kLnsOpcode, 0b111, 0b0000000}},        // O_LNS_C_I_LP_GPR_RP (S-type)
+    {"laddc", {kLnsOpcode, 0b000, 0b0000001}},      // CORDIC LNS add, R-type
+    {"lsubc", {kLnsOpcode, 0b001, 0b0000001}},      // CORDIC LNS subtract, R-type
 };
 
 std::unordered_map<std::string, RTypeInstructionEncoding> R_type_instruction_encoding_map = {
@@ -1019,6 +1027,8 @@ std::unordered_map<std::string, std::vector<SyntaxType>> instruction_syntax_map 
     // LNS extension (custom-0)
     {"ladd", {SyntaxType::O_LNS_C_LNS_C_LNS}},
     {"lsub", {SyntaxType::O_LNS_C_LNS_C_LNS}},
+    {"laddc", {SyntaxType::O_LNS_C_LNS_C_LNS}},
+    {"lsubc", {SyntaxType::O_LNS_C_LNS_C_LNS}},
     {"lmul", {SyntaxType::O_LNS_C_LNS_C_LNS}},
     {"ldiv", {SyntaxType::O_LNS_C_LNS_C_LNS}},
     {"fcvt.lns.s", {SyntaxType::O_LNS_C_FPR}}, // FP32 in f-register -> LNS
@@ -1165,9 +1175,9 @@ bool isWellFormedLnsInstruction(uint32_t instruction)
     const uint32_t funct7 = (instruction >> 25) & 0b1111111;
     if (funct3 >= 0b110)
         return true; // llw / lsw
-    if (funct7 != 0)
-        return false;
-    return funct3 <= 0b011 || rs2 == 0;
+    if (funct7 == 0)
+        return funct3 <= 0b011 || rs2 == 0;
+    return funct7 == 1 && funct3 <= 0b001;
 }
 
 bool isValidFDSTypeInstruction(const std::string &instruction)
@@ -1492,6 +1502,12 @@ std::string disassemble(uint32_t instruction)
         case 0b010:
         case 0b011:
         {
+            if (funct7 == 1 && funct3 <= 0b001)
+            {
+                static const char *const cordicNames[] = {"laddc", "lsubc"};
+                return std::string(cordicNames[funct3]) + " " + lr(rd) + ", " + lr(rs1) +
+                       ", " + lr(rs2);
+            }
             if (funct7 != 0)
                 break;
             static const char *const names[] = {"ladd", "lsub", "lmul", "ldiv"};

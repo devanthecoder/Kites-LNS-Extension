@@ -196,7 +196,9 @@ enum class Instruction
     kfcvt_lns_s,
     kfcvt_s_lns,
     kllw,
-    klsw
+    klsw,
+    kladdc,
+    klsubc
 };
 
 // TODO: use enum class for instruction encoding
@@ -425,8 +427,9 @@ inline constexpr unsigned int kLnsOpcode = 0b0001011;
 /**
  * @brief Encoding of an LNS instruction (custom-0 opcode).
  *
- * funct3 selects the instruction: 000 ladd, 001 lsub, 010 lmul, 011 ldiv, 100 fcvt.lns.s,
- * 101 fcvt.s.lns, 110 llw (I-type), 111 lsw (S-type). funct7 is 0 for all of them.
+ * funct3 selects the instruction: 000 ladd/laddc, 001 lsub/lsubc, 010 lmul, 011 ldiv,
+ * 100 fcvt.lns.s, 101 fcvt.s.lns, 110 llw (I-type), 111 lsw (S-type). funct7 is 0 for the
+ * existing arithmetic/conversion instructions and 1 for laddc/lsubc.
  */
 struct LnsInstructionEncoding
 {
@@ -560,9 +563,9 @@ bool isValidLnsStoreInstruction(const std::string &instruction);
 /// True if the 32-bit instruction word uses the custom-0 opcode (an LNS instruction).
 bool isLnsInstruction(uint32_t instruction);
 
-/// True for a custom-0 word that is a defined LNS instruction: funct7 = 0 for funct3 000-101,
-/// rs2 = 0 for the two converts (funct3 100/101); llw/lsw (110/111) carry an immediate instead.
-/// Other custom-0 words are reserved and execute as no-ops.
+/// True for a defined custom-0 LNS word: funct7 = 0 for the existing arithmetic/conversion
+/// instructions, funct7 = 1 for CORDIC add/sub (funct3 000/001), rs2 = 0 for converts, and
+/// llw/lsw (funct3 110/111) carry immediates. Other custom-0 words are reserved no-ops.
 bool isWellFormedLnsInstruction(uint32_t instruction);
 
 bool isFInstruction(const uint32_t &instruction);

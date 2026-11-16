@@ -22,6 +22,7 @@
 #include "assembler/assembler.h"
 #include "common/instructions.h"
 #include "processor/lns/lns_alu.h"
+#include "processor/lns/lns_cordic_addsub.h"
 #include "processor/lns/lns_conversion.h"
 #include "processor/lns/lns_format.h"
 #include "processor/registers.h"
@@ -214,6 +215,31 @@ TEST(LnsInstructions, SpecialValuesFollowTheAlu)
     EXPECT_TRUE(lns::isZero(r.ReadLns(7)));
 }
 
+TEST(LnsInstructions, CordicAddSubInstructionsUseTheCordicHelper)
+{
+    auto vm = loadProgram("laddc l3, l1, l2\n"
+                          "lsubc l4, l1, l2\n"
+                          "laddc l0, l1, l1\n"
+                          "lsubc l5, l1, l1\n"
+                          "laddc l6, l1, l7\n"
+                          "lsubc l8, l9, l10\n");
+    vm->registers_.WriteLns(1, lns::pack(false, 0));
+    vm->registers_.WriteLns(2, lns::pack(false, -(1 << lns::kFracBits)));
+    vm->registers_.WriteLns(7, lns::kNaN);
+    vm->registers_.WriteLns(9, lns::kPosInf);
+    vm->registers_.WriteLns(10, lns::kPosInf);
+    vm->DebugRun();
+
+    EXPECT_EQ(vm->registers_.ReadLns(3),
+              lns::LnsCordicAddSub::add(vm->registers_.ReadLns(1), vm->registers_.ReadLns(2)));
+    EXPECT_EQ(vm->registers_.ReadLns(4),
+              lns::LnsCordicAddSub::sub(vm->registers_.ReadLns(1), vm->registers_.ReadLns(2)));
+    EXPECT_EQ(vm->registers_.ReadLns(0), lns::kPosZero);
+    EXPECT_EQ(vm->registers_.ReadLns(5), lns::kPosZero); // exact cancellation
+    EXPECT_TRUE(lns::isNaN(vm->registers_.ReadLns(6)));
+    EXPECT_TRUE(lns::isNaN(vm->registers_.ReadLns(8))); // +inf - +inf
+}
+
 TEST(LnsInstructions, L0IsHardWiredToPositiveZero)
 {
     auto vm = runProgram(loadFloat(1, 2.0f) +
@@ -306,13 +332,13 @@ TEST(LnsInstructions, ReservedEncodingsAreNoOps)
 {
     // Hand-built custom-0 words appended after a normal program. Each would overwrite a register
     // that the program has already set if it were executed:
-    //   0x0231008B : ladd l1, l2, l3 with funct7 = 1       (would set l1 to +0)
+    //   0x0431008B : ladd l1, l2, l3 with funct7 = 2       (would set l1 to +0)
     //   0x0013428B : fcvt.lns.s l5, f6 with rs2 = 1        (would set l5 to +0, f6 is 0.0)
     //   0x0013528B : fcvt.s.lns f5, l6 with rs2 = 1        (would set f5 to 0.0, l6 is +0)
     auto vm = runProgram(loadFloat(1, 2.0f) + loadFloat(5, 3.0f) +
                              "fcvt.lns.s l1, f1\n"
                              "fcvt.lns.s l5, f1\n",
-                         {0x0231008Bu, 0x0013428Bu, 0x0013528Bu});
+                         {0x0431008Bu, 0x0013428Bu, 0x0013528Bu});
     auto &r = vm->registers_;
     const lns::LnsWord two = lns::pack(false, 1 << lns::kFracBits);
     EXPECT_EQ(r.ReadLns(1), two);
@@ -410,6 +436,8 @@ TEST(LnsInstructions, MachineCodeAndDisassembly)
                               "lsub l1, l2, l3\n"
                               "lmul l1, l2, l3\n"
                               "ldiv l1, l2, l3\n"
+                              "laddc l1, l2, l3\n"
+                              "lsubc l1, l2, l3\n"
                               "fcvt.lns.s l5, f6\n"
                               "fcvt.s.lns f5, l6\n"
                               "llw l5, 8(x2)\n"
@@ -419,14 +447,16 @@ TEST(LnsInstructions, MachineCodeAndDisassembly)
                               "ladd la0, la1, ls2\n");
     const Kites::AssembledProgram program = Kites::assemble(stream);
     const std::vector<uint32_t> expected = {
-        0x0031008B, 0x0031108B, 0x0031208B, 0x0031308B, 0x0003428B, 0x0003528B,
+        0x0031008B, 0x0031108B, 0x0031208B, 0x0031308B, 0x0231008B, 0x0231108B,
+        0x0003428B, 0x0003528B,
         0x0081628B, 0x0051740B, 0xFFC1628B, 0xFE517E0B, (18u << 20) | (11u << 15) | (10u << 7) | 0x0B,
     };
     const std::vector<std::string> disassembly = {
         "ladd l1, l2, l3",    "lsub l1, l2, l3",    "lmul l1, l2, l3",
-        "ldiv l1, l2, l3",    "fcvt.lns.s l5, f6",  "fcvt.s.lns f5, l6",
-        "llw l5, 8(x2)",      "lsw l5, 8(x2)",      "llw l5, -4(x2)",
-        "lsw l5, -4(x2)",     "ladd l10, l11, l18",
+        "ldiv l1, l2, l3",    "laddc l1, l2, l3",   "lsubc l1, l2, l3",
+        "fcvt.lns.s l5, f6",  "fcvt.s.lns f5, l6",  "llw l5, 8(x2)",
+        "lsw l5, 8(x2)",      "llw l5, -4(x2)",     "lsw l5, -4(x2)",
+        "ladd l10, l11, l18",
     };
     ASSERT_EQ(program.text_buffer.size(), expected.size());
     for (size_t i = 0; i < expected.size(); ++i)
@@ -435,4 +465,7 @@ TEST(LnsInstructions, MachineCodeAndDisassembly)
         EXPECT_TRUE(isLnsInstruction(program.text_buffer[i])) << i;
         EXPECT_EQ(disassemble(program.text_buffer[i]), disassembly[i]) << i;
     }
+    EXPECT_TRUE(Kites::instruction_set::isWellFormedLnsInstruction(0x0231008Bu));
+    EXPECT_TRUE(Kites::instruction_set::isWellFormedLnsInstruction(0x0231108Bu));
+    EXPECT_FALSE(Kites::instruction_set::isWellFormedLnsInstruction(0x0431008Bu));
 }

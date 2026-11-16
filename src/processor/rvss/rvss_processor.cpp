@@ -10,6 +10,7 @@
 #include "config/config.h"
 #include "common/globals.h"
 #include "processor/lns/lns_alu.h"
+#include "processor/lns/lns_cordic_addsub.h"
 #include "processor/lns/lns_conversion.h"
 #include "processor/lns/lns_format.h"
 #include "ui/processor_tab/processor_designs/rvss_processor_circuit_scene.h"
@@ -415,8 +416,19 @@ void RVSSProcessor::ExecuteLns()
     }
 
     const uint8_t funct3 = (current_instruction_ >> 12) & 0b111;
+    const uint8_t funct7 = (current_instruction_ >> 25) & 0b1111111;
     const uint8_t rs1 = (current_instruction_ >> 15) & 0b11111;
     const uint8_t rs2 = (current_instruction_ >> 20) & 0b11111;
+
+    if (funct7 == 0b0000001 && funct3 <= 0b001)
+    {
+        const lns::LnsWord a = registers_.ReadLns(rs1);
+        const lns::LnsWord b = registers_.ReadLns(rs2);
+        const lns::LnsWord result = funct3 == 0b000 ? lns::LnsCordicAddSub::add(a, b)
+                                                    : lns::LnsCordicAddSub::sub(a, b);
+        execution_result_ = static_cast<int64_t>(result);
+        return;
+    }
 
     switch (funct3)
     {

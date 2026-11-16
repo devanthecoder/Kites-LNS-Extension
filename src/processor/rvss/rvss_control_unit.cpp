@@ -152,7 +152,7 @@ void RVSSControlUnit::SetControlSignals(uint32_t instruction)
             alu_src_ = true;
             mem_write_ = true;
             break;
-        default: // ladd, lsub, lmul, ldiv, fcvt.lns.s, fcvt.s.lns
+        default: // arithmetic, CORDIC add/sub, and conversions
             reg_write_ = true;
             break;
         }

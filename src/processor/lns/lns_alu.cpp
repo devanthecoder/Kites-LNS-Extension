@@ -6,8 +6,11 @@
 #include "lns_alu.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <cmath>
+#include <cstdlib>
 #include <stdexcept>
+#include <string>
 
 namespace Kites
 {
@@ -133,6 +136,25 @@ LnsWord addImpl(const LnsAlu &alu, LnsWord aWord, LnsWord bWord, bool subtractB)
         return encodeInfinity(bNegative);
     }
     return addFinite(alu, a, b, bNegative);
+}
+
+/// Reads an integer table-size override from environment variable @p name; @p fallback if unset.
+/// @throws std::invalid_argument if the variable is set but is not a whole decimal number.
+long long sizeFromEnv(const char *name, long long fallback)
+{
+    const char *text = std::getenv(name);
+    if (text == nullptr)
+    {
+        return fallback;
+    }
+    char *end = nullptr;
+    errno = 0;
+    const long long value = std::strtoll(text, &end, 10);
+    if (end == text || *end != '\0' || errno == ERANGE)
+    {
+        throw std::invalid_argument(std::string(name) + ": not an integer: \"" + text + "\"");
+    }
+    return value;
 }
 } // namespace
 
@@ -306,7 +328,11 @@ LnsWord LnsAlu::div(LnsWord a, LnsWord b)
 
 const LnsAlu &defaultAlu()
 {
-    static const LnsAlu alu(LNS_ALU_CORRECTION_SAMPLES);
+    // The environment variable LNS_ALU_CORRECTION_SAMPLES overrides the macro (table-size
+    // sweeps). Out-of-range values are clamped to a still-invalid count so the constructor throws.
+    static const LnsAlu alu(static_cast<size_t>(
+        std::clamp(sizeFromEnv("LNS_ALU_CORRECTION_SAMPLES", LNS_ALU_CORRECTION_SAMPLES), 0LL,
+                   static_cast<long long>(LnsAlu::kMaxCorrectionSamples) + 1)));
     return alu;
 }
 } // namespace lns

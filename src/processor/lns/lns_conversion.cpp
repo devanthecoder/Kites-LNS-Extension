@@ -1,9 +1,13 @@
 #include "lns_conversion.h"
 
+#include <algorithm>
 #include <bit>
+#include <cerrno>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <stdexcept>
+#include <string>
 
 namespace Kites
 {
@@ -68,6 +72,25 @@ Kind classify(LnsWord &w)
         return Kind::Inf;
     }
     return Kind::Finite;
+}
+
+/// Reads an integer table-size override from environment variable @p name; @p fallback if unset.
+/// @throws std::invalid_argument if the variable is set but is not a whole decimal number.
+long long sizeFromEnv(const char *name, long long fallback)
+{
+    const char *text = std::getenv(name);
+    if (text == nullptr)
+    {
+        return fallback;
+    }
+    char *end = nullptr;
+    errno = 0;
+    const long long value = std::strtoll(text, &end, 10);
+    if (end == text || *end != '\0' || errno == ERANGE)
+    {
+        throw std::invalid_argument(std::string(name) + ": not an integer: \"" + text + "\"");
+    }
+    return value;
 }
 } // namespace
 
@@ -366,7 +389,12 @@ int32_t LnsConverter::toInt32(LnsWord w) const
 
 const LnsConverter &defaultConverter()
 {
-    static const LnsConverter converter(LNS_LOG_LUT_BITS, LNS_EXP_LUT_BITS);
+    // The environment variables LNS_LOG_LUT_BITS / LNS_EXP_LUT_BITS override the macros
+    // (table-size sweeps). Out-of-range values are clamped to a still-invalid size so the
+    // constructor throws.
+    static const LnsConverter converter(
+        static_cast<int>(std::clamp(sizeFromEnv("LNS_LOG_LUT_BITS", LNS_LOG_LUT_BITS), 0LL, 64LL)),
+        static_cast<int>(std::clamp(sizeFromEnv("LNS_EXP_LUT_BITS", LNS_EXP_LUT_BITS), 0LL, 64LL)));
     return converter;
 }
 

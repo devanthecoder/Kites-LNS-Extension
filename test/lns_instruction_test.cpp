@@ -1,7 +1,7 @@
 /**
  * @file lns_instruction_test.cpp
  * @brief The LNS extension on the single-cycle RVSS processor: ladd/lsub/lmul/ldiv,
- *        fcvt.lns.s / fcvt.s.lns, llw/lsw, the L register bank (l0 hard-wired to +0, reset
+ *        fcvt.lns.s / fcvt.s.lns, the integer converts, llw/lsw, the L register bank (l0 hard-wired to +0, reset
  *        value +0), reserved encodings, and undo/redo.
  *
  * The results are checked against the LnsAlu / LnsConverter library directly (the instructions
@@ -238,6 +238,146 @@ TEST(LnsInstructions, CordicAddSubInstructionsUseTheCordicHelper)
     EXPECT_EQ(vm->registers_.ReadLns(5), lns::kPosZero); // exact cancellation
     EXPECT_TRUE(lns::isNaN(vm->registers_.ReadLns(6)));
     EXPECT_TRUE(lns::isNaN(vm->registers_.ReadLns(8))); // +inf - +inf
+}
+
+TEST(LnsInstructions, IntegerConvertsMatchConverterLibrary)
+{
+    // x5..x9 hold the inputs; li loads full 64-bit values.
+    auto vm = runProgram("li x5, -7\n"
+                         "li x6, -1\n"          // W: -1, WU: 4294967295, LU: 2^64 - 1
+                         "li x7, -123456789012\n"
+                         "li x8, 4294967301\n"  // 2^32 + 5: the W/WU forms read the low 32 bits
+                         "li x9, 1000\n"
+                         "fcvt.lns.w  l1, x5\n"
+                         "fcvt.lns.wu l2, x6\n"
+                         "fcvt.lns.l  l3, x7\n"
+                         "fcvt.lns.lu l4, x6\n"
+                         "fcvt.lns.w  l5, x8\n"
+                         "fcvt.lns.w  l6, x6\n"
+                         "fcvt.lns.l  l7, x9\n"
+                         "fcvt.w.lns  x10, l1\n"
+                         "fcvt.wu.lns x11, l2\n"
+                         "fcvt.l.lns  x12, l3\n"
+                         "fcvt.lu.lns x13, l4\n"
+                         "fcvt.w.lns  x14, l5\n"
+                         "fcvt.l.lns  x15, l7\n");
+    auto &r = vm->registers_;
+    const lns::LnsConverter &c = lns::defaultConverter();
+
+    EXPECT_EQ(r.ReadLns(1), c.fromInt32(-7));
+    EXPECT_EQ(r.ReadLns(2), c.fromUInt32(4294967295u));
+    EXPECT_EQ(r.ReadLns(3), c.fromInt64(-123456789012LL));
+    EXPECT_EQ(r.ReadLns(4), c.fromUInt64(UINT64_MAX));
+    EXPECT_EQ(r.ReadLns(5), c.fromInt32(5));
+    EXPECT_EQ(r.ReadLns(6), c.fromInt32(-1));
+    EXPECT_EQ(r.ReadLns(6), lns::pack(true, 0)); // -1 is exact: sign set, log 0
+    EXPECT_EQ(r.ReadLns(7), c.fromInt64(1000));
+
+    // 32-bit results are sign-extended into the 64-bit register, as RISC-V fcvt.w(u) does.
+    EXPECT_EQ(r.ReadGpr(10), static_cast<uint64_t>(static_cast<int64_t>(c.toInt32(r.ReadLns(1)))));
+    EXPECT_EQ(r.ReadGpr(11), static_cast<uint64_t>(static_cast<int64_t>(
+                                 static_cast<int32_t>(c.toUInt32(r.ReadLns(2))))));
+    EXPECT_EQ(r.ReadGpr(12), static_cast<uint64_t>(c.toInt64(r.ReadLns(3))));
+    EXPECT_EQ(r.ReadGpr(13), c.toUInt64(r.ReadLns(4)));
+    EXPECT_EQ(r.ReadGpr(14), static_cast<uint64_t>(static_cast<int64_t>(c.toInt32(r.ReadLns(5)))));
+
+    // Small integers survive the round trip exactly.
+    EXPECT_EQ(static_cast<int64_t>(r.ReadGpr(10)), -7);
+    EXPECT_EQ(r.ReadGpr(14), 5u);
+    EXPECT_EQ(r.ReadGpr(15), 1000u);
+}
+
+TEST(LnsInstructions, IntegerConvertsSaturateLikeRiscV)
+{
+    auto vm = runProgram(loadFloat(1, 3.0e30f) + loadFloat(2, -2.0f) + loadFloat(3, 3.0e9f) +
+                         "li t0, 0x7FC00000\n"
+                         "fmv.w.x f4, t0\n" // FP32 NaN
+                         "fcvt.lns.s l1, f1\n"
+                         "fcvt.lns.s l2, f2\n"
+                         "fcvt.lns.s l3, f3\n"
+                         "fcvt.lns.s l4, f4\n"
+                         "li x20, 99\n"
+                         "fcvt.w.lns  x10, l1\n"  // too large -> INT32_MAX
+                         "fcvt.w.lns  x11, l2\n"  // -2
+                         "fcvt.wu.lns x12, l2\n"  // negative -> unsigned: 0
+                         "fcvt.wu.lns x13, l3\n"  // 3e9 fits in 32 bits unsigned
+                         "fcvt.w.lns  x14, l4\n"  // NaN -> INT32_MAX
+                         "fcvt.l.lns  x15, l4\n"  // NaN -> INT64_MAX
+                         "fcvt.l.lns  x16, l1\n"  // 3e30 -> INT64_MAX
+                         "fcvt.lu.lns x17, l2\n"  // negative -> 0
+                         "fcvt.w.lns  x0, l1\n"   // x0 stays 0
+                         "fcvt.w.lns  x20, lzero\n"); // +0 -> 0
+    auto &r = vm->registers_;
+    EXPECT_EQ(r.ReadGpr(10), 0x7FFFFFFFu);
+    EXPECT_EQ(static_cast<int64_t>(r.ReadGpr(11)), -2);
+    EXPECT_EQ(r.ReadGpr(12), 0u);
+    EXPECT_EQ(r.ReadGpr(13), static_cast<uint64_t>(static_cast<int64_t>(static_cast<int32_t>(
+                                 lns::defaultConverter().toUInt32(r.ReadLns(3))))));
+    EXPECT_EQ(r.ReadGpr(13) >> 32, 0xFFFFFFFFu); // bit 31 set, so sign-extended
+    EXPECT_EQ(r.ReadGpr(14), 0x7FFFFFFFu);
+    EXPECT_EQ(r.ReadGpr(15), 0x7FFFFFFFFFFFFFFFull);
+    EXPECT_EQ(r.ReadGpr(16), 0x7FFFFFFFFFFFFFFFull);
+    EXPECT_EQ(r.ReadGpr(17), 0u);
+    EXPECT_EQ(r.ReadGpr(0), 0u);
+    EXPECT_EQ(r.ReadGpr(20), 0u);
+}
+
+TEST(LnsInstructions, UndoRestoresIntegerConvertResults)
+{
+    auto vm = loadProgram("li x5, 12\n"
+                          "fcvt.lns.w l1, x5\n"
+                          "fcvt.w.lns x6, l1\n");
+    while (vm->program_counter_ < vm->program_size_)
+    {
+        vm->Step();
+    }
+    auto &r = vm->registers_;
+    ASSERT_EQ(r.ReadGpr(6), 12u);
+    ASSERT_EQ(r.ReadLns(1), lns::defaultConverter().fromInt32(12));
+
+    vm->Undo(); // fcvt.w.lns x6
+    EXPECT_EQ(r.ReadGpr(6), 0u);
+    vm->Undo(); // fcvt.lns.w l1
+    EXPECT_EQ(r.ReadLns(1), lns::kPosZero);
+    vm->Redo();
+    vm->Redo();
+    EXPECT_EQ(r.ReadGpr(6), 12u);
+}
+
+TEST(LnsInstructions, IntegerConvertMachineCodeAndDisassembly)
+{
+    using Kites::instruction_set::disassemble;
+    using Kites::instruction_set::isWellFormedLnsInstruction;
+
+    Kites::setupVmStateDirectory();
+    std::istringstream stream("fcvt.lns.w l5, x6\n"
+                              "fcvt.lns.wu l5, x6\n"
+                              "fcvt.lns.l l5, x6\n"
+                              "fcvt.lns.lu l5, x6\n"
+                              "fcvt.w.lns x5, l6\n"
+                              "fcvt.wu.lns x5, l6\n"
+                              "fcvt.l.lns x5, l6\n"
+                              "fcvt.lu.lns x5, l6\n"
+                              "fcvt.lns.w la0, a1\n");
+    const Kites::AssembledProgram program = Kites::assemble(stream);
+    // funct7 = 0000010, rs2 = integer type (0 W, 1 WU, 2 L, 3 LU), funct3 = 100 / 101
+    const std::vector<uint32_t> expected = {0x0403428B, 0x0413428B, 0x0423428B,
+                                            0x0433428B, 0x0403528B, 0x0413528B,
+                                            0x0423528B, 0x0433528B, 0x0405C50B};
+    const std::vector<std::string> disassembly = {
+        "fcvt.lns.w l5, x6", "fcvt.lns.wu l5, x6", "fcvt.lns.l l5, x6",
+        "fcvt.lns.lu l5, x6", "fcvt.w.lns x5, l6", "fcvt.wu.lns x5, l6",
+        "fcvt.l.lns x5, l6", "fcvt.lu.lns x5, l6", "fcvt.lns.w l10, x11",
+    };
+    ASSERT_EQ(program.text_buffer.size(), expected.size());
+    for (size_t i = 0; i < expected.size(); ++i)
+    {
+        EXPECT_EQ(program.text_buffer[i], expected[i]) << i;
+        EXPECT_TRUE(isWellFormedLnsInstruction(program.text_buffer[i])) << i;
+        EXPECT_EQ(disassemble(program.text_buffer[i]), disassembly[i]) << i;
+    }
+    EXPECT_FALSE(isWellFormedLnsInstruction(0x0443428Bu)); // funct7 = 2 with rs2 = 4
+    EXPECT_FALSE(isWellFormedLnsInstruction(0x0403028Bu)); // funct7 = 2 with funct3 = 000
 }
 
 TEST(LnsInstructions, L0IsHardWiredToPositiveZero)

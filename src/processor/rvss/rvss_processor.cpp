@@ -430,6 +430,53 @@ void RVSSProcessor::ExecuteLns()
         return;
     }
 
+    if (funct7 == 0b0000010)
+    { // integer converts; rs2 selects the type: 0 W, 1 WU, 2 L, 3 LU (as in RISC-V fcvt)
+        const lns::LnsConverter &converter = lns::defaultConverter();
+        if (funct3 == 0b100)
+        { // FCVT.LNS.{W,WU,L,LU}: integer in x[rs1] -> LNS
+            const uint64_t x = registers_.ReadGpr(rs1);
+            lns::LnsWord result = 0;
+            switch (rs2)
+            {
+            case 0b00000:
+                result = converter.fromInt32(static_cast<int32_t>(x));
+                break;
+            case 0b00001:
+                result = converter.fromUInt32(static_cast<uint32_t>(x));
+                break;
+            case 0b00010:
+                result = converter.fromInt64(static_cast<int64_t>(x));
+                break;
+            default:
+                result = converter.fromUInt64(x);
+                break;
+            }
+            execution_result_ = static_cast<int64_t>(result);
+        }
+        else
+        { // FCVT.{W,WU,L,LU}.LNS: LNS -> integer in x[rd]; 32-bit results are sign-extended
+            const lns::LnsWord w = registers_.ReadLns(rs1);
+            switch (rs2)
+            {
+            case 0b00000:
+                execution_result_ = static_cast<int64_t>(converter.toInt32(w));
+                break;
+            case 0b00001:
+                execution_result_ =
+                    static_cast<int64_t>(static_cast<int32_t>(converter.toUInt32(w)));
+                break;
+            case 0b00010:
+                execution_result_ = converter.toInt64(w);
+                break;
+            default:
+                execution_result_ = static_cast<int64_t>(converter.toUInt64(w));
+                break;
+            }
+        }
+        return;
+    }
+
     switch (funct3)
     {
     case 0b000: // LADD
@@ -1077,13 +1124,21 @@ void RVSSProcessor::WriteBackLns()
     }
 
     const uint8_t funct3 = (current_instruction_ >> 12) & 0b111;
+    const uint8_t funct7 = (current_instruction_ >> 25) & 0b1111111;
     const uint8_t rd = (current_instruction_ >> 7) & 0b11111;
 
     uint64_t old_reg = 0;
     uint64_t new_reg = 0;
     unsigned int reg_type = 3; // LNS
 
-    if (funct3 == 0b101)
+    if (funct3 == 0b101 && funct7 == 0b0000010)
+    { // FCVT.{W,WU,L,LU}.LNS writes an integer into a GPR
+        reg_type = 0;
+        old_reg = registers_.ReadGpr(rd);
+        registers_.WriteGpr(rd, static_cast<uint64_t>(execution_result_));
+        new_reg = registers_.ReadGpr(rd); // x0 ignores the write
+    }
+    else if (funct3 == 0b101)
     { // FCVT.S.LNS writes an FP32 value into an FPR
         reg_type = 2;
         old_reg = registers_.ReadFpr(rd);

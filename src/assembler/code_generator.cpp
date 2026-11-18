@@ -386,11 +386,16 @@ uint32_t generateLnsTypeMachineCode(const ICUnit &block)
     else
     {
         // R-type: funct7 | rs2 | rs1 | funct3 | rd | opcode
-        // (the two converts leave rs2 empty: the field is fixed to 0)
+        // (the converts leave rs2 empty: the field is fixed by the encoding table, 0 for the
+        // FP32 converts and the integer type for the integer converts)
         machineCode |= (funct7 << 25);
         if (!block.getRs2().empty())
         {
             machineCode |= (extractRegisterIndex(block.getRs2()) << 20);
+        }
+        else
+        {
+            machineCode |= (static_cast<uint32_t>(encoding.rs2.to_ulong()) << 20);
         }
         machineCode |= (extractRegisterIndex(block.getRs1()) << 15);
         machineCode |= (extractRegisterIndex(block.getRd()) << 7);

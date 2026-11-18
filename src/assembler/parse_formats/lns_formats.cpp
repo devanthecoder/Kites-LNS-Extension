@@ -107,6 +107,60 @@ bool Parser::parse_O_FPR_C_LNS()
     return false;
 }
 
+// fcvt.lns.w / .wu / .l / .lu: lrd, rs1   (rs2 field = integer type, from the encoding table)
+bool Parser::parse_O_LNS_C_GPR()
+{
+    if (peekToken(1).line_number == currentToken().line_number &&
+        peekToken(1).type == TokenType::LNS_REGISTER &&
+        peekToken(2).line_number == currentToken().line_number &&
+        peekToken(2).type == TokenType::COMMA &&
+        peekToken(3).line_number == currentToken().line_number &&
+        peekToken(3).type == TokenType::GP_REGISTER &&
+        (peekToken(4).type == TokenType::EOF_ ||
+         peekToken(4).line_number != currentToken().line_number))
+    {
+        ICUnit block;
+        block.setOpcode(currentToken().value);
+        block.setLineNumber(currentToken().line_number);
+        block.setInstructionIndex(instruction_index_);
+        block.setRd(canonicalLnsName(peekToken(1).value));
+        block.setRs1(reg_alias_to_name.at(peekToken(3).value));
+        skipCurrentLine();
+        intermediate_code_.emplace_back(block, true);
+        instruction_number_line_number_mapping_[instruction_index_] = block.getLineNumber();
+        instruction_index_++;
+        return true;
+    }
+    return false;
+}
+
+// fcvt.w.lns / .wu / .l / .lu: rd, lrs1   (rs2 field = integer type, from the encoding table)
+bool Parser::parse_O_GPR_C_LNS()
+{
+    if (peekToken(1).line_number == currentToken().line_number &&
+        peekToken(1).type == TokenType::GP_REGISTER &&
+        peekToken(2).line_number == currentToken().line_number &&
+        peekToken(2).type == TokenType::COMMA &&
+        peekToken(3).line_number == currentToken().line_number &&
+        peekToken(3).type == TokenType::LNS_REGISTER &&
+        (peekToken(4).type == TokenType::EOF_ ||
+         peekToken(4).line_number != currentToken().line_number))
+    {
+        ICUnit block;
+        block.setOpcode(currentToken().value);
+        block.setLineNumber(currentToken().line_number);
+        block.setInstructionIndex(instruction_index_);
+        block.setRd(reg_alias_to_name.at(peekToken(1).value));
+        block.setRs1(canonicalLnsName(peekToken(3).value));
+        skipCurrentLine();
+        intermediate_code_.emplace_back(block, true);
+        instruction_number_line_number_mapping_[instruction_index_] = block.getLineNumber();
+        instruction_index_++;
+        return true;
+    }
+    return false;
+}
+
 // llw lrd, imm(rs1)  /  lsw lrs2, imm(rs1)
 bool Parser::parse_O_LNS_C_I_LP_GPR_RP()
 {

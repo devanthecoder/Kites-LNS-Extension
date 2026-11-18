@@ -198,7 +198,15 @@ enum class Instruction
     kllw,
     klsw,
     kladdc,
-    klsubc
+    klsubc,
+    kfcvt_lns_w,
+    kfcvt_lns_wu,
+    kfcvt_lns_l,
+    kfcvt_lns_lu,
+    kfcvt_w_lns,
+    kfcvt_wu_lns,
+    kfcvt_l_lns,
+    kfcvt_lu_lns
 };
 
 // TODO: use enum class for instruction encoding
@@ -428,17 +436,20 @@ inline constexpr unsigned int kLnsOpcode = 0b0001011;
  * @brief Encoding of an LNS instruction (custom-0 opcode).
  *
  * funct3 selects the instruction: 000 ladd/laddc, 001 lsub/lsubc, 010 lmul, 011 ldiv,
- * 100 fcvt.lns.s, 101 fcvt.s.lns, 110 llw (I-type), 111 lsw (S-type). funct7 is 0 for the
- * existing arithmetic/conversion instructions and 1 for laddc/lsubc.
+ * 100 fcvt.lns.*, 101 fcvt.*.lns, 110 llw (I-type), 111 lsw (S-type). funct7 is 0 for the
+ * existing arithmetic/FP32-conversion instructions, 1 for laddc/lsubc and 2 for the integer
+ * conversions, whose rs2 field selects the integer type as in RISC-V fcvt: 0 W, 1 WU, 2 L, 3 LU.
  */
 struct LnsInstructionEncoding
 {
     std::bitset<7> opcode;
     std::bitset<3> funct3;
     std::bitset<7> funct7;
+    std::bitset<5> rs2; ///< fixed rs2 field for the conversions (0 otherwise)
 
-    LnsInstructionEncoding(unsigned int opcode, unsigned int funct3, unsigned int funct7)
-        : opcode(opcode), funct3(funct3), funct7(funct7)
+    LnsInstructionEncoding(unsigned int opcode, unsigned int funct3, unsigned int funct7,
+                           unsigned int rs2 = 0)
+        : opcode(opcode), funct3(funct3), funct7(funct7), rs2(rs2)
     {
     }
 };
@@ -486,6 +497,8 @@ enum class SyntaxType
     O_LNS_C_LNS_C_LNS,   ///< Opcode lns-register , lns-register , lns-register
     O_LNS_C_FPR,         ///< Opcode lns-register , floating-point-register
     O_FPR_C_LNS,         ///< Opcode floating-point-register , lns-register
+    O_LNS_C_GPR,         ///< Opcode lns-register , general-register
+    O_GPR_C_LNS,         ///< Opcode general-register , lns-register
     O_LNS_C_I_LP_GPR_RP, ///< Opcode lns-register , immediate , lparen ( general-register ) rparen
 };
 
@@ -564,8 +577,9 @@ bool isValidLnsStoreInstruction(const std::string &instruction);
 bool isLnsInstruction(uint32_t instruction);
 
 /// True for a defined custom-0 LNS word: funct7 = 0 for the existing arithmetic/conversion
-/// instructions, funct7 = 1 for CORDIC add/sub (funct3 000/001), rs2 = 0 for converts, and
-/// llw/lsw (funct3 110/111) carry immediates. Other custom-0 words are reserved no-ops.
+/// instructions, funct7 = 1 for CORDIC add/sub (funct3 000/001), rs2 = 0 for the FP32 converts,
+/// funct7 = 2 with rs2 = 0..3 for the integer converts (funct3 100/101), and llw/lsw
+/// (funct3 110/111) carry immediates. Other custom-0 words are reserved no-ops.
 bool isWellFormedLnsInstruction(uint32_t instruction);
 
 bool isFInstruction(const uint32_t &instruction);

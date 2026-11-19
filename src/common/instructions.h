@@ -442,8 +442,9 @@ inline constexpr unsigned int kLnsStoreOpcode = 0b1011011;
  * R-type (custom-0) funct3 selects the instruction: 000 ladd/laddc, 001 lsub/lsubc, 010 lmul,
  * 011 ldiv, 100 fcvt.lns.*, 101 fcvt.*.lns (110 and 111 are free). llw and lsw have their own
  * opcodes (custom-1 / custom-2) with funct3 = 010, mirroring flw / fsw. funct7 is 0 for the
- * existing arithmetic/FP32-conversion instructions, 1 for laddc/lsubc and 2 for the integer
- * conversions, whose rs2 field selects the integer type as in RISC-V fcvt: 0 W, 1 WU, 2 L, 3 LU.
+ * main instructions and 1 for their alternates in the same funct3 column: laddc/lsubc (CORDIC
+ * add/sub) under ladd/lsub, and the integer conversions under the FP32 conversions, whose rs2
+ * field selects the integer type as in RISC-V fcvt: 0 W, 1 WU, 2 L, 3 LU.
  */
 struct LnsInstructionEncoding
 {
@@ -584,7 +585,7 @@ bool isLnsInstruction(uint32_t instruction);
 
 /// True for a defined LNS word. custom-0: funct7 = 0 for the arithmetic/FP32-conversion
 /// instructions (funct3 000-101, rs2 = 0 for the converts), funct7 = 1 for CORDIC add/sub
-/// (funct3 000/001), funct7 = 2 with rs2 = 0..3 for the integer converts (funct3 100/101).
+/// (funct3 000/001) and the integer converts (funct3 100/101, rs2 = 0..3).
 /// custom-1 / custom-2: llw / lsw with funct3 = 010. Other LNS-opcode words are reserved no-ops.
 bool isWellFormedLnsInstruction(uint32_t instruction);
 

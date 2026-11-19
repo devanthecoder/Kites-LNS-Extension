@@ -360,10 +360,10 @@ TEST(LnsInstructions, IntegerConvertMachineCodeAndDisassembly)
                               "fcvt.lu.lns x5, l6\n"
                               "fcvt.lns.w la0, a1\n");
     const Kites::AssembledProgram program = Kites::assemble(stream);
-    // funct7 = 0000010, rs2 = integer type (0 W, 1 WU, 2 L, 3 LU), funct3 = 100 / 101
-    const std::vector<uint32_t> expected = {0x0403428B, 0x0413428B, 0x0423428B,
-                                            0x0433428B, 0x0403528B, 0x0413528B,
-                                            0x0423528B, 0x0433528B, 0x0405C50B};
+    // funct7 = 0000001, rs2 = integer type (0 W, 1 WU, 2 L, 3 LU), funct3 = 100 / 101
+    const std::vector<uint32_t> expected = {0x0203428B, 0x0213428B, 0x0223428B,
+                                            0x0233428B, 0x0203528B, 0x0213528B,
+                                            0x0223528B, 0x0233528B, 0x0205C50B};
     const std::vector<std::string> disassembly = {
         "fcvt.lns.w l5, x6", "fcvt.lns.wu l5, x6", "fcvt.lns.l l5, x6",
         "fcvt.lns.lu l5, x6", "fcvt.w.lns x5, l6", "fcvt.wu.lns x5, l6",
@@ -376,8 +376,9 @@ TEST(LnsInstructions, IntegerConvertMachineCodeAndDisassembly)
         EXPECT_TRUE(isWellFormedLnsInstruction(program.text_buffer[i])) << i;
         EXPECT_EQ(disassemble(program.text_buffer[i]), disassembly[i]) << i;
     }
-    EXPECT_FALSE(isWellFormedLnsInstruction(0x0443428Bu)); // funct7 = 2 with rs2 = 4
-    EXPECT_FALSE(isWellFormedLnsInstruction(0x0403028Bu)); // funct7 = 2 with funct3 = 000
+    EXPECT_FALSE(isWellFormedLnsInstruction(0x0243428Bu)); // funct7 = 1 with rs2 = 4
+    EXPECT_FALSE(isWellFormedLnsInstruction(0x0203228Bu)); // funct7 = 1 with funct3 = 010
+    EXPECT_FALSE(isWellFormedLnsInstruction(0x0403428Bu)); // funct7 = 2 is reserved
 }
 
 TEST(LnsInstructions, L0IsHardWiredToPositiveZero)

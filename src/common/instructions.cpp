@@ -197,14 +197,14 @@ std::unordered_map<Instruction, InstructionEncoding> instruction_encoding_map = 
     {Instruction::klsw, {0b1011011, -1, 0b010, -1, -1, -1}},
     {Instruction::kladdc, {0b0001011, -1, 0b000, -1, -1, 0b0000001}},
     {Instruction::klsubc, {0b0001011, -1, 0b001, -1, -1, 0b0000001}},
-    {Instruction::kfcvt_lns_w, {0b0001011, -1, 0b100, 0b00000, -1, 0b0000010}},
-    {Instruction::kfcvt_lns_wu, {0b0001011, -1, 0b100, 0b00001, -1, 0b0000010}},
-    {Instruction::kfcvt_lns_l, {0b0001011, -1, 0b100, 0b00010, -1, 0b0000010}},
-    {Instruction::kfcvt_lns_lu, {0b0001011, -1, 0b100, 0b00011, -1, 0b0000010}},
-    {Instruction::kfcvt_w_lns, {0b0001011, -1, 0b101, 0b00000, -1, 0b0000010}},
-    {Instruction::kfcvt_wu_lns, {0b0001011, -1, 0b101, 0b00001, -1, 0b0000010}},
-    {Instruction::kfcvt_l_lns, {0b0001011, -1, 0b101, 0b00010, -1, 0b0000010}},
-    {Instruction::kfcvt_lu_lns, {0b0001011, -1, 0b101, 0b00011, -1, 0b0000010}},
+    {Instruction::kfcvt_lns_w, {0b0001011, -1, 0b100, 0b00000, -1, 0b0000001}},
+    {Instruction::kfcvt_lns_wu, {0b0001011, -1, 0b100, 0b00001, -1, 0b0000001}},
+    {Instruction::kfcvt_lns_l, {0b0001011, -1, 0b100, 0b00010, -1, 0b0000001}},
+    {Instruction::kfcvt_lns_lu, {0b0001011, -1, 0b100, 0b00011, -1, 0b0000001}},
+    {Instruction::kfcvt_w_lns, {0b0001011, -1, 0b101, 0b00000, -1, 0b0000001}},
+    {Instruction::kfcvt_wu_lns, {0b0001011, -1, 0b101, 0b00001, -1, 0b0000001}},
+    {Instruction::kfcvt_l_lns, {0b0001011, -1, 0b101, 0b00010, -1, 0b0000001}},
+    {Instruction::kfcvt_lu_lns, {0b0001011, -1, 0b101, 0b00011, -1, 0b0000001}},
 
 };
 
@@ -576,14 +576,14 @@ std::unordered_map<std::string, LnsInstructionEncoding> lns_instruction_encoding
     {"lsw", {kLnsStoreOpcode, 0b010, 0b0000000}},   // O_LNS_C_I_LP_GPR_RP (S-type, custom-2)
     {"laddc", {kLnsOpcode, 0b000, 0b0000001}},      // CORDIC LNS add, R-type
     {"lsubc", {kLnsOpcode, 0b001, 0b0000001}},      // CORDIC LNS subtract, R-type
-    {"fcvt.lns.w", {kLnsOpcode, 0b100, 0b0000010, 0b00000}},   // O_LNS_C_GPR, int -> LNS
-    {"fcvt.lns.wu", {kLnsOpcode, 0b100, 0b0000010, 0b00001}},   // O_LNS_C_GPR, int -> LNS
-    {"fcvt.lns.l", {kLnsOpcode, 0b100, 0b0000010, 0b00010}},   // O_LNS_C_GPR, int -> LNS
-    {"fcvt.lns.lu", {kLnsOpcode, 0b100, 0b0000010, 0b00011}},   // O_LNS_C_GPR, int -> LNS
-    {"fcvt.w.lns", {kLnsOpcode, 0b101, 0b0000010, 0b00000}},   // O_GPR_C_LNS, LNS -> int
-    {"fcvt.wu.lns", {kLnsOpcode, 0b101, 0b0000010, 0b00001}},   // O_GPR_C_LNS, LNS -> int
-    {"fcvt.l.lns", {kLnsOpcode, 0b101, 0b0000010, 0b00010}},   // O_GPR_C_LNS, LNS -> int
-    {"fcvt.lu.lns", {kLnsOpcode, 0b101, 0b0000010, 0b00011}},   // O_GPR_C_LNS, LNS -> int
+    {"fcvt.lns.w", {kLnsOpcode, 0b100, 0b0000001, 0b00000}},   // O_LNS_C_GPR, int -> LNS
+    {"fcvt.lns.wu", {kLnsOpcode, 0b100, 0b0000001, 0b00001}},   // O_LNS_C_GPR, int -> LNS
+    {"fcvt.lns.l", {kLnsOpcode, 0b100, 0b0000001, 0b00010}},   // O_LNS_C_GPR, int -> LNS
+    {"fcvt.lns.lu", {kLnsOpcode, 0b100, 0b0000001, 0b00011}},   // O_LNS_C_GPR, int -> LNS
+    {"fcvt.w.lns", {kLnsOpcode, 0b101, 0b0000001, 0b00000}},   // O_GPR_C_LNS, LNS -> int
+    {"fcvt.wu.lns", {kLnsOpcode, 0b101, 0b0000001, 0b00001}},   // O_GPR_C_LNS, LNS -> int
+    {"fcvt.l.lns", {kLnsOpcode, 0b101, 0b0000001, 0b00010}},   // O_GPR_C_LNS, LNS -> int
+    {"fcvt.lu.lns", {kLnsOpcode, 0b101, 0b0000001, 0b00011}},   // O_GPR_C_LNS, LNS -> int
 };
 
 std::unordered_map<std::string, RTypeInstructionEncoding> R_type_instruction_encoding_map = {
@@ -1213,9 +1213,9 @@ bool isWellFormedLnsInstruction(uint32_t instruction)
         return false;
     if (funct7 == 0)
         return funct3 <= 0b011 || rs2 == 0;
-    if (funct7 == 2)
-        return (funct3 == 0b100 || funct3 == 0b101) && rs2 <= 0b00011; // integer converts
-    return funct7 == 1 && funct3 <= 0b001;
+    if (funct7 == 1) // alternates: CORDIC add/sub, integer converts (rs2 = type)
+        return funct3 <= 0b001 || ((funct3 == 0b100 || funct3 == 0b101) && rs2 <= 0b00011);
+    return false;
 }
 
 bool isValidFDSTypeInstruction(const std::string &instruction)
@@ -1552,7 +1552,7 @@ std::string disassemble(uint32_t instruction)
             return std::string(names[funct3]) + " " + lr(rd) + ", " + lr(rs1) + ", " + lr(rs2);
         }
         case 0b100:
-            if (funct7 == 2 && rs2 <= 0b00011)
+            if (funct7 == 1 && rs2 <= 0b00011)
             {
                 static const char *const toLns[] = {"fcvt.lns.w", "fcvt.lns.wu", "fcvt.lns.l",
                                                     "fcvt.lns.lu"};
@@ -1562,7 +1562,7 @@ std::string disassemble(uint32_t instruction)
                 break;
             return "fcvt.lns.s " + lr(rd) + ", " + fr(rs1);
         case 0b101:
-            if (funct7 == 2 && rs2 <= 0b00011)
+            if (funct7 == 1 && rs2 <= 0b00011)
             {
                 static const char *const fromLns[] = {"fcvt.w.lns", "fcvt.wu.lns", "fcvt.l.lns",
                                                       "fcvt.lu.lns"};

@@ -445,7 +445,7 @@ void RVSSProcessor::ExecuteLns()
         return;
     }
 
-    if (funct7 == 0b0000010)
+    if (funct7 == 0b0000001 && (funct3 == 0b100 || funct3 == 0b101))
     { // integer converts; rs2 selects the type: 0 W, 1 WU, 2 L, 3 LU (as in RISC-V fcvt)
         const lns::LnsConverter &converter = lns::defaultConverter();
         if (funct3 == 0b100)
@@ -1134,7 +1134,7 @@ void RVSSProcessor::WriteBackLns()
     uint64_t new_reg = 0;
     unsigned int reg_type = 3; // LNS
 
-    if (!isLoad && funct3 == 0b101 && funct7 == 0b0000010)
+    if (!isLoad && funct3 == 0b101 && funct7 == 0b0000001)
     { // FCVT.{W,WU,L,LU}.LNS writes an integer into a GPR
         reg_type = 0;
         old_reg = registers_.ReadGpr(rd);

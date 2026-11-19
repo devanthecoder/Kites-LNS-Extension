@@ -8,7 +8,8 @@
 //
 // Build (from the repo root, one command line):
 //   g++ -std=c++20 -O2 -I src/processor/lns tools/lns_lj_accuracy.cpp src/processor/lns/lns_alu.cpp
-//       src/processor/lns/lns_conversion.cpp src/processor/lns/lns_cordic_addsub.cpp -o lns_lj_accuracy
+//       src/processor/lns/lns_conversion.cpp src/processor/lns/lns_cordic_addsub.cpp
+//       src/processor/lns/lns_pow.cpp -o lns_lj_accuracy
 // Run:  ./lns_lj_accuracy [examples/lns_lj/lj_fp32.s] [examples/lns_lj/reference.txt]
 //   Positions are read from the .float lines of the program, so they match the simulator input.
 //       ./lns_lj_accuracy --size <log bits> <exp bits> <ALU samples>
@@ -16,6 +17,7 @@
 #include "lns_alu.h"
 #include "lns_conversion.h"
 #include "lns_cordic_addsub.h"
+#include "lns_pow.h"
 
 #include <array>
 #include <bit>
@@ -129,7 +131,7 @@ float energyFp32(const std::vector<Atom> &pos)
     return energy;
 }
 
-/// LNS kernel, same op order as lj_lns.s / lj_lns_cordic.s.
+/// LNS kernel, same op order as lj_lns.s / lj_lns_cordic.s (s6 = r2^-3 with lpown).
 template <typename Add, typename Sub>
 LnsWord energyLns(const std::vector<Atom> &pos, const LnsConverter &conv, Add add, Sub sub)
 {
@@ -141,8 +143,7 @@ LnsWord energyLns(const std::vector<Atom> &pos, const LnsConverter &conv, Add ad
             l[i][k] = conv.fromFloatBits(std::bit_cast<uint32_t>(pos[i][k]));
         }
     }
-    const LnsWord one = 0x00000000u;
-    const LnsWord four = conv.fromFloatBits(std::bit_cast<uint32_t>(4.0f));
+    const LnsWord four = conv.fromInt32(4); // fcvt.lns.w
 
     LnsWord energy = add(kPosZero, kPosZero);
     for (size_t i = 0; i < pos.size(); ++i)
@@ -154,8 +155,7 @@ LnsWord energyLns(const std::vector<Atom> &pos, const LnsConverter &conv, Add ad
             const LnsWord dz = sub(l[i][2], l[j][2]);
             LnsWord r2 = add(LnsAlu::mul(dx, dx), LnsAlu::mul(dy, dy));
             r2 = add(r2, LnsAlu::mul(dz, dz));
-            const LnsWord inv = LnsAlu::div(one, r2);
-            const LnsWord s6 = LnsAlu::mul(LnsAlu::mul(inv, inv), inv);
+            const LnsWord s6 = powerN(r2, -3);
             const LnsWord s12 = LnsAlu::mul(s6, s6);
             const LnsWord v = LnsAlu::mul(four, sub(s12, s6));
             energy = add(energy, v);

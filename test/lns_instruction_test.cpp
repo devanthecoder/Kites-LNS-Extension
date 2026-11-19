@@ -10,6 +10,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -25,6 +26,7 @@
 #include "processor/lns/lns_cordic_addsub.h"
 #include "processor/lns/lns_conversion.h"
 #include "processor/lns/lns_format.h"
+#include "processor/lns/lns_pow.h"
 #include "processor/registers.h"
 #include "processor/rvss/rvss_processor.h"
 #include "utils/utils.h"
@@ -381,6 +383,157 @@ TEST(LnsInstructions, IntegerConvertMachineCodeAndDisassembly)
     EXPECT_FALSE(isWellFormedLnsInstruction(0x0403428Bu)); // funct7 = 2 is reserved
 }
 
+TEST(LnsInstructions, PowerInstructionsMatchLibrary)
+{
+    const float xs[] = {2.0f, 3.0f, 0.7f, 1.0e10f};
+    const float ys[] = {0.5f, 2.5f, -1.75f, 3.0f};
+    std::string source;
+    for (int i = 0; i < 4; ++i)
+    {
+        source += loadFloat(i + 1, xs[i]) + loadFloat(i + 5, ys[i]);
+        source += "fcvt.lns.s l" + std::to_string(i + 1) + ", f" + std::to_string(i + 1) + "\n";
+        source += "fcvt.lns.s l" + std::to_string(i + 5) + ", f" + std::to_string(i + 5) + "\n";
+        source += "lpow l" + std::to_string(i + 10) + ", l" + std::to_string(i + 1) + ", l" +
+                  std::to_string(i + 5) + "\n";
+    }
+    source += "li x5, 3\nli x6, -2\nli x7, 0\n"
+              "lpown l20, l2, x5\n"
+              "lpown l21, l3, x6\n"
+              "lpown l22, l1, x7\n"
+              "lpown l23, l2, x0\n";
+    auto vm = runProgram(source);
+    auto &r = vm->registers_;
+    for (int i = 0; i < 4; ++i)
+    {
+        const lns::LnsWord expected = lns::power(r.ReadLns(i + 1), r.ReadLns(i + 5));
+        EXPECT_EQ(r.ReadLns(i + 10), expected) << xs[i] << "^" << ys[i];
+        // Against the real number. The log errors of x and y (a few LSBs of 2^-22 each) are
+        // scaled by |y * log2(x)|, so the bound grows with it.
+        const double value = std::exp2(lns::fieldOf(expected) / lns::kScale);
+        const double scale = std::max(1.0, std::fabs(double{ys[i]} * std::log2(double{xs[i]})));
+        EXPECT_NEAR(value / std::pow(static_cast<double>(xs[i]), ys[i]), 1.0, 2e-6 * scale)
+            << xs[i] << "^" << ys[i];
+    }
+    EXPECT_EQ(r.ReadLns(20), lns::powerN(r.ReadLns(2), 3));
+    EXPECT_EQ(r.ReadLns(21), lns::powerN(r.ReadLns(3), -2));
+    EXPECT_EQ(r.ReadLns(22), lns::LnsWord{0}); // x^0 = 1
+    EXPECT_EQ(r.ReadLns(23), lns::LnsWord{0}); // x0 reads 0
+}
+
+TEST(LnsInstructions, PowerExactCases)
+{
+    auto vm = runProgram(loadFloat(1, 3.0f) + loadFloat(2, -3.0f) + loadFloat(3, 0.5f) +
+                         loadFloat(4, 2.0f) + loadFloat(5, 1.0f) +
+                         "fcvt.lns.s l1, f1\n"  // 3
+                         "fcvt.lns.s l2, f2\n"  // -3
+                         "fcvt.lns.s l3, f3\n"  // 0.5
+                         "fcvt.lns.s l4, f4\n"  // 2
+                         "fcvt.lns.s l5, f5\n"  // 1
+                         "li x5, 2\nli x6, -1\nli x7, 3\n"
+                         "lpow  l10, l1, l3\n"  // sqrt(3)
+                         "lpow  l11, l1, l4\n"  // 3^2.0
+                         "lmul  l12, l1, l1\n"
+                         "lpow  l13, l1, l5\n"  // 3^1.0
+                         "lpown l14, l1, x5\n"  // 3^2
+                         "lpown l15, l1, x6\n"  // 3^-1
+                         "ldiv  l16, l5, l1\n"
+                         "lpown l17, l2, x7\n"  // (-3)^3
+                         "lmul  l18, l2, l2\n"
+                         "lmul  l18, l18, l2\n"
+                         "lpown l19, l2, x5\n"  // (-3)^2
+                         "lpow  l20, l2, l5\n"  // (-3)^1.0
+                         "lpow  l21, l2, l4\n"); // (-3)^2.0: NaN, integer powers use lpown
+    auto &r = vm->registers_;
+    const int32_t l3 = lns::fieldOf(r.ReadLns(1));
+    EXPECT_EQ(r.ReadLns(10), lns::pack(false, (l3 + 1) / 2)); // exact halving, rounded
+    EXPECT_EQ(r.ReadLns(11), r.ReadLns(12));
+    EXPECT_EQ(r.ReadLns(13), r.ReadLns(1));
+    EXPECT_EQ(r.ReadLns(14), r.ReadLns(12));
+    EXPECT_EQ(r.ReadLns(15), r.ReadLns(16));
+    EXPECT_EQ(r.ReadLns(17), r.ReadLns(18));
+    EXPECT_TRUE(lns::signOf(r.ReadLns(17)));
+    EXPECT_EQ(r.ReadLns(19), r.ReadLns(12));
+    EXPECT_EQ(r.ReadLns(20), r.ReadLns(2));
+    EXPECT_EQ(r.ReadLns(21), lns::kNaN);
+}
+
+TEST(LnsInstructions, PowerSpecialValues)
+{
+    using lns::power;
+    using lns::powerN;
+    const lns::LnsWord one = 0, two = lns::pack(false, 1 << lns::kFracBits);
+    const lns::LnsWord half = lns::pack(false, -(1 << lns::kFracBits));
+    const lns::LnsWord minusTwo = lns::pack(true, 1 << lns::kFracBits);
+    const lns::LnsWord big = lns::pack(false, 200 << lns::kFracBits);
+    const lns::LnsWord tiny = lns::pack(false, -(200 << lns::kFracBits));
+    const lns::LnsWord eight = lns::pack(false, 3 << lns::kFracBits);
+    const lns::LnsWord zero = lns::kPosZero, nan = lns::kNaN;
+    const lns::LnsWord pInf = lns::kPosInf, nInf = lns::kNegInf;
+
+    // x^0 = 1 and 1^y = 1, even with NaN; otherwise NaN propagates.
+    EXPECT_EQ(powerN(nan, 0), one);
+    EXPECT_EQ(power(nan, zero), one);
+    EXPECT_EQ(power(one, nan), one);
+    EXPECT_EQ(powerN(nan, 2), nan);
+    EXPECT_EQ(power(two, nan), nan);
+    // Zero and Inf bases.
+    EXPECT_EQ(powerN(zero, 3), zero);
+    EXPECT_EQ(powerN(zero, -3), pInf);
+    EXPECT_EQ(powerN(nInf, 3), nInf);
+    EXPECT_EQ(powerN(nInf, 2), pInf);
+    EXPECT_EQ(powerN(pInf, -1), zero);
+    EXPECT_EQ(power(zero, two), zero);
+    EXPECT_EQ(power(zero, minusTwo), pInf);
+    EXPECT_EQ(power(pInf, two), pInf);
+    EXPECT_EQ(power(pInf, minusTwo), zero);
+    // Infinite exponents.
+    EXPECT_EQ(power(two, pInf), pInf);
+    EXPECT_EQ(power(half, pInf), zero);
+    EXPECT_EQ(power(two, nInf), zero);
+    EXPECT_EQ(power(half, nInf), pInf);
+    // Negative base.
+    EXPECT_EQ(power(minusTwo, two), nan);
+    EXPECT_EQ(power(minusTwo, one), minusTwo);
+    EXPECT_EQ(powerN(minusTwo, 3), lns::pack(true, 3 << lns::kFracBits));
+    EXPECT_EQ(powerN(minusTwo, -2), lns::pack(false, -(2 << lns::kFracBits)));
+    // Saturation.
+    EXPECT_EQ(powerN(big, 2), pInf);
+    EXPECT_EQ(powerN(tiny, 2), zero);
+    EXPECT_EQ(power(big, eight), pInf);
+    EXPECT_EQ(power(tiny, eight), zero);
+    EXPECT_EQ(power(big, lns::pack(true, 3 << lns::kFracBits)), zero); // big^(-8)
+    EXPECT_EQ(powerN(two, INT64_MAX), pInf);
+    EXPECT_EQ(powerN(two, INT64_MIN), zero);
+    EXPECT_EQ(powerN(minusTwo, INT64_MAX), nInf);
+    // Powers of two in the exponent are exact: (2^1)^8 = 2^8, 8^0.5 rounds 3/2 in Q22 exactly.
+    EXPECT_EQ(power(two, eight), lns::pack(false, 8 << lns::kFracBits));
+    EXPECT_EQ(power(eight, half), lns::pack(false, 3 << (lns::kFracBits - 1)));
+}
+
+TEST(LnsInstructions, PowerMachineCodeAndDisassembly)
+{
+    using Kites::instruction_set::disassemble;
+    using Kites::instruction_set::isWellFormedLnsInstruction;
+
+    Kites::setupVmStateDirectory();
+    std::istringstream stream("lpow l1, l2, l3\n"
+                              "lpown l1, l2, x3\n"
+                              "lpown la0, la1, a2\n");
+    const Kites::AssembledProgram program = Kites::assemble(stream);
+    const std::vector<uint32_t> expected = {0x0031608B, 0x0031708B, 0x00C5F50B};
+    const std::vector<std::string> disassembly = {"lpow l1, l2, l3", "lpown l1, l2, x3",
+                                                  "lpown l10, l11, x12"};
+    ASSERT_EQ(program.text_buffer.size(), expected.size());
+    for (size_t i = 0; i < expected.size(); ++i)
+    {
+        EXPECT_EQ(program.text_buffer[i], expected[i]) << i;
+        EXPECT_TRUE(isWellFormedLnsInstruction(program.text_buffer[i])) << i;
+        EXPECT_EQ(disassemble(program.text_buffer[i]), disassembly[i]) << i;
+    }
+    EXPECT_FALSE(isWellFormedLnsInstruction(0x0231608Bu)); // funct7 = 1, funct3 = 110
+    EXPECT_FALSE(isWellFormedLnsInstruction(0x0231708Bu)); // funct7 = 1, funct3 = 111
+}
+
 TEST(LnsInstructions, L0IsHardWiredToPositiveZero)
 {
     auto vm = runProgram(loadFloat(1, 2.0f) +
@@ -476,12 +629,12 @@ TEST(LnsInstructions, ReservedEncodingsAreNoOps)
     //   0x0431008B : ladd l1, l2, l3 with funct7 = 2       (would set l1 to +0)
     //   0x0013428B : fcvt.lns.s l5, f6 with rs2 = 1        (would set l5 to +0, f6 is 0.0)
     //   0x0013528B : fcvt.s.lns f5, l6 with rs2 = 1        (would set f5 to 0.0, l6 is +0)
-    //   0x0081628B : old custom-0 llw l5, 8(x2) slot      (would load a word into l5)
+    //   0x0281628B : funct7 = 1 with funct3 = 110          (would write l5)
     //   0x008132AB : custom-1 (llw opcode) with funct3 = 011
     auto vm = runProgram(loadFloat(1, 2.0f) + loadFloat(5, 3.0f) +
                              "fcvt.lns.s l1, f1\n"
                              "fcvt.lns.s l5, f1\n",
-                         {0x0431008Bu, 0x0013428Bu, 0x0013528Bu, 0x0081628Bu, 0x008132ABu});
+                         {0x0431008Bu, 0x0013428Bu, 0x0013528Bu, 0x0281628Bu, 0x008132ABu});
     auto &r = vm->registers_;
     const lns::LnsWord two = lns::pack(false, 1 << lns::kFracBits);
     EXPECT_EQ(r.ReadLns(1), two);
@@ -611,10 +764,10 @@ TEST(LnsInstructions, MachineCodeAndDisassembly)
     EXPECT_TRUE(Kites::instruction_set::isWellFormedLnsInstruction(0x0231008Bu));
     EXPECT_TRUE(Kites::instruction_set::isWellFormedLnsInstruction(0x0231108Bu));
     EXPECT_FALSE(Kites::instruction_set::isWellFormedLnsInstruction(0x0431008Bu));
-    // llw / lsw live on custom-1 / custom-2 with funct3 = 010; the old custom-0 funct3 110 / 111
-    // slots and other funct3 values on the new opcodes are reserved.
-    EXPECT_FALSE(Kites::instruction_set::isWellFormedLnsInstruction(0x0081628Bu));
-    EXPECT_FALSE(Kites::instruction_set::isWellFormedLnsInstruction(0x0051740Bu));
+    // llw / lsw live on custom-1 / custom-2 with funct3 = 010; other funct3 values on those
+    // opcodes are reserved, as is funct3 110 / 111 on the funct7 = 1 page.
+    EXPECT_FALSE(Kites::instruction_set::isWellFormedLnsInstruction(0x0281628Bu));
+    EXPECT_FALSE(Kites::instruction_set::isWellFormedLnsInstruction(0x0251740Bu));
     EXPECT_FALSE(Kites::instruction_set::isWellFormedLnsInstruction(0x008132ABu));
     EXPECT_FALSE(Kites::instruction_set::isWellFormedLnsInstruction(0x0051345Bu));
 }

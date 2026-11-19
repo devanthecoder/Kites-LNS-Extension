@@ -512,6 +512,12 @@ void Parser::parseTextDirective()
                     break;
                 }
 
+                case instruction_set::SyntaxType::O_LNS_C_LNS_C_GPR:
+                {
+                    valid_syntax = parse_O_LNS_C_LNS_C_GPR();
+                    break;
+                }
+
                 case instruction_set::SyntaxType::O_LNS_C_I_LP_GPR_RP:
                 {
                     valid_syntax = parse_O_LNS_C_I_LP_GPR_RP();

@@ -175,6 +175,7 @@ class Parser
     bool parse_O_FPR_C_LNS();
     bool parse_O_LNS_C_GPR();
     bool parse_O_GPR_C_LNS();
+    bool parse_O_LNS_C_LNS_C_GPR();
     bool parse_O_LNS_C_I_LP_GPR_RP();
 
     /**

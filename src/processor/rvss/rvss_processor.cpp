@@ -13,6 +13,7 @@
 #include "processor/lns/lns_cordic_addsub.h"
 #include "processor/lns/lns_conversion.h"
 #include "processor/lns/lns_format.h"
+#include "processor/lns/lns_pow.h"
 #include "ui/processor_tab/processor_designs/rvss_processor_circuit_scene.h"
 #include "utils/utils.h"
 #include <QDebug>
@@ -512,6 +513,14 @@ void RVSSProcessor::ExecuteLns()
     case 0b101: // FCVT.S.LNS: LNS -> FP32, zero-extended into f[rd]
         execution_result_ = static_cast<int64_t>(
             lns::defaultConverter().toFloatBits(registers_.ReadLns(rs1)));
+        break;
+    case 0b110: // LPOW: l[rs1] ^ l[rs2]
+        execution_result_ = static_cast<int64_t>(
+            lns::power(registers_.ReadLns(rs1), registers_.ReadLns(rs2)));
+        break;
+    case 0b111: // LPOWN: l[rs1] ^ x[rs2], integer exponent
+        execution_result_ = static_cast<int64_t>(lns::powerN(
+            registers_.ReadLns(rs1), static_cast<int64_t>(registers_.ReadGpr(rs2))));
         break;
     default:
         break;

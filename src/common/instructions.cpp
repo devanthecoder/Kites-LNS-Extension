@@ -205,6 +205,8 @@ std::unordered_map<Instruction, InstructionEncoding> instruction_encoding_map = 
     {Instruction::kfcvt_wu_lns, {0b0001011, -1, 0b101, 0b00001, -1, 0b0000001}},
     {Instruction::kfcvt_l_lns, {0b0001011, -1, 0b101, 0b00010, -1, 0b0000001}},
     {Instruction::kfcvt_lu_lns, {0b0001011, -1, 0b101, 0b00011, -1, 0b0000001}},
+    {Instruction::klpow, {0b0001011, -1, 0b110, -1, -1, 0b0000000}},
+    {Instruction::klpown, {0b0001011, -1, 0b111, -1, -1, 0b0000000}},
 
 };
 
@@ -385,7 +387,9 @@ std::unordered_map<std::string, Instruction> instruction_string_map = {
     {"fcvt.w.lns", Instruction::kfcvt_w_lns},
     {"fcvt.wu.lns", Instruction::kfcvt_wu_lns},
     {"fcvt.l.lns", Instruction::kfcvt_l_lns},
-    {"fcvt.lu.lns", Instruction::kfcvt_lu_lns}
+    {"fcvt.lu.lns", Instruction::kfcvt_lu_lns},
+    {"lpow", Instruction::klpow},
+    {"lpown", Instruction::klpown}
 
 };
 
@@ -418,7 +422,8 @@ static const std::unordered_set<std::string> valid_instructions = {
 
     // LNS extension
     "ladd", "lsub", "lmul", "ldiv", "fcvt.lns.s", "fcvt.s.lns", "llw", "lsw", "laddc",
-    "lsubc", "fcvt.lns.w", "fcvt.lns.wu", "fcvt.lns.l", "fcvt.lns.lu", "fcvt.w.lns", "fcvt.wu.lns", "fcvt.l.lns", "fcvt.lu.lns"
+    "lsubc", "fcvt.lns.w", "fcvt.lns.wu", "fcvt.lns.l", "fcvt.lns.lu", "fcvt.w.lns",
+    "fcvt.wu.lns", "fcvt.l.lns", "fcvt.lu.lns", "lpow", "lpown"
 
 };
 
@@ -562,7 +567,8 @@ static const std::unordered_set<std::string> DExtensionInstructions = {
 
 static const std::unordered_set<std::string> LnsInstructions = {
     "ladd", "lsub", "lmul", "ldiv", "fcvt.lns.s", "fcvt.s.lns", "llw", "lsw", "laddc",
-    "lsubc", "fcvt.lns.w", "fcvt.lns.wu", "fcvt.lns.l", "fcvt.lns.lu", "fcvt.w.lns", "fcvt.wu.lns", "fcvt.l.lns", "fcvt.lu.lns",
+    "lsubc", "fcvt.lns.w", "fcvt.lns.wu", "fcvt.lns.l", "fcvt.lns.lu", "fcvt.w.lns",
+    "fcvt.wu.lns", "fcvt.l.lns", "fcvt.lu.lns", "lpow", "lpown",
 };
 
 std::unordered_map<std::string, LnsInstructionEncoding> lns_instruction_encoding_map = {
@@ -584,6 +590,8 @@ std::unordered_map<std::string, LnsInstructionEncoding> lns_instruction_encoding
     {"fcvt.wu.lns", {kLnsOpcode, 0b101, 0b0000001, 0b00001}},   // O_GPR_C_LNS, LNS -> int
     {"fcvt.l.lns", {kLnsOpcode, 0b101, 0b0000001, 0b00010}},   // O_GPR_C_LNS, LNS -> int
     {"fcvt.lu.lns", {kLnsOpcode, 0b101, 0b0000001, 0b00011}},   // O_GPR_C_LNS, LNS -> int
+    {"lpow", {kLnsOpcode, 0b110, 0b0000000}},       // O_LNS_C_LNS_C_LNS, x^y
+    {"lpown", {kLnsOpcode, 0b111, 0b0000000}},      // O_LNS_C_LNS_C_GPR, x^n
 };
 
 std::unordered_map<std::string, RTypeInstructionEncoding> R_type_instruction_encoding_map = {
@@ -1065,6 +1073,8 @@ std::unordered_map<std::string, std::vector<SyntaxType>> instruction_syntax_map 
     {"fcvt.wu.lns", {SyntaxType::O_GPR_C_LNS}}, // LNS -> integer in x-register
     {"fcvt.l.lns", {SyntaxType::O_GPR_C_LNS}}, // LNS -> integer in x-register
     {"fcvt.lu.lns", {SyntaxType::O_GPR_C_LNS}}, // LNS -> integer in x-register
+    {"lpow", {SyntaxType::O_LNS_C_LNS_C_LNS}},  // x^y, y an LNS value
+    {"lpown", {SyntaxType::O_LNS_C_LNS_C_GPR}}, // x^n, n an integer in an x-register
     {"llw", {SyntaxType::O_LNS_C_I_LP_GPR_RP}},
     {"lsw", {SyntaxType::O_LNS_C_I_LP_GPR_RP}},
 
@@ -1209,10 +1219,8 @@ bool isWellFormedLnsInstruction(uint32_t instruction)
     const uint32_t funct7 = (instruction >> 25) & 0b1111111;
     if (opcode != kLnsOpcode)
         return funct3 == 0b010; // llw / lsw (their top bits are the immediate)
-    if (funct3 >= 0b110)
-        return false;
     if (funct7 == 0)
-        return funct3 <= 0b011 || rs2 == 0;
+        return (funct3 != 0b100 && funct3 != 0b101) || rs2 == 0; // converts: rs2 = 0
     if (funct7 == 1) // alternates: CORDIC add/sub, integer converts (rs2 = type)
         return funct3 <= 0b001 || ((funct3 == 0b100 || funct3 == 0b101) && rs2 <= 0b00011);
     return false;
@@ -1415,6 +1423,7 @@ std::string getExpectedSyntaxes(const std::string &opcode)
         {SyntaxType::O_FPR_C_LNS, "<fp-reg>, <lns-reg>"},
         {SyntaxType::O_LNS_C_GPR, "<lns-reg>, <gp-reg>"},
         {SyntaxType::O_GPR_C_LNS, "<gp-reg>, <lns-reg>"},
+        {SyntaxType::O_LNS_C_LNS_C_GPR, "<lns-reg>, <lns-reg>, <gp-reg>"},
         {SyntaxType::O_LNS_C_I_LP_GPR_RP, "<lns-reg>, <imm>(<gp-reg>)"},
     };
 
@@ -1571,6 +1580,14 @@ std::string disassemble(uint32_t instruction)
             if (funct7 != 0 || rs2 != 0)
                 break;
             return "fcvt.s.lns " + fr(rd) + ", " + lr(rs1);
+        case 0b110:
+            if (funct7 != 0)
+                break;
+            return "lpow " + lr(rd) + ", " + lr(rs1) + ", " + lr(rs2);
+        case 0b111:
+            if (funct7 != 0)
+                break;
+            return "lpown " + lr(rd) + ", " + lr(rs1) + ", " + xr(rs2);
         }
         break;
     }

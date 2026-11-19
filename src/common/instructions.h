@@ -429,14 +429,19 @@ struct FDSTypeInstructionEncoding
     }
 };
 
-/// custom-0 major opcode, used by all LNS instructions.
+/// custom-0 major opcode, used by all R-type LNS instructions.
 inline constexpr unsigned int kLnsOpcode = 0b0001011;
+/// custom-1 major opcode: the LNS load llw (I-type, funct3 = 010), like LOAD-FP for flw.
+inline constexpr unsigned int kLnsLoadOpcode = 0b0101011;
+/// custom-2 major opcode: the LNS store lsw (S-type, funct3 = 010), like STORE-FP for fsw.
+inline constexpr unsigned int kLnsStoreOpcode = 0b1011011;
 
 /**
  * @brief Encoding of an LNS instruction (custom-0 opcode).
  *
- * funct3 selects the instruction: 000 ladd/laddc, 001 lsub/lsubc, 010 lmul, 011 ldiv,
- * 100 fcvt.lns.*, 101 fcvt.*.lns, 110 llw (I-type), 111 lsw (S-type). funct7 is 0 for the
+ * R-type (custom-0) funct3 selects the instruction: 000 ladd/laddc, 001 lsub/lsubc, 010 lmul,
+ * 011 ldiv, 100 fcvt.lns.*, 101 fcvt.*.lns (110 and 111 are free). llw and lsw have their own
+ * opcodes (custom-1 / custom-2) with funct3 = 010, mirroring flw / fsw. funct7 is 0 for the
  * existing arithmetic/FP32-conversion instructions, 1 for laddc/lsubc and 2 for the integer
  * conversions, whose rs2 field selects the integer type as in RISC-V fcvt: 0 W, 1 WU, 2 L, 3 LU.
  */
@@ -573,13 +578,14 @@ bool isValidLnsLoadInstruction(const std::string &instruction);
 /// True for the S-type LNS store (lsw).
 bool isValidLnsStoreInstruction(const std::string &instruction);
 
-/// True if the 32-bit instruction word uses the custom-0 opcode (an LNS instruction).
+/// True if the 32-bit instruction word uses one of the LNS opcodes: custom-0 (R-type),
+/// custom-1 (llw) or custom-2 (lsw).
 bool isLnsInstruction(uint32_t instruction);
 
-/// True for a defined custom-0 LNS word: funct7 = 0 for the existing arithmetic/conversion
-/// instructions, funct7 = 1 for CORDIC add/sub (funct3 000/001), rs2 = 0 for the FP32 converts,
-/// funct7 = 2 with rs2 = 0..3 for the integer converts (funct3 100/101), and llw/lsw
-/// (funct3 110/111) carry immediates. Other custom-0 words are reserved no-ops.
+/// True for a defined LNS word. custom-0: funct7 = 0 for the arithmetic/FP32-conversion
+/// instructions (funct3 000-101, rs2 = 0 for the converts), funct7 = 1 for CORDIC add/sub
+/// (funct3 000/001), funct7 = 2 with rs2 = 0..3 for the integer converts (funct3 100/101).
+/// custom-1 / custom-2: llw / lsw with funct3 = 010. Other LNS-opcode words are reserved no-ops.
 bool isWellFormedLnsInstruction(uint32_t instruction);
 
 bool isFInstruction(const uint32_t &instruction);

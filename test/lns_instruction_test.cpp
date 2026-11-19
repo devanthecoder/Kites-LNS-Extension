@@ -475,10 +475,12 @@ TEST(LnsInstructions, ReservedEncodingsAreNoOps)
     //   0x0431008B : ladd l1, l2, l3 with funct7 = 2       (would set l1 to +0)
     //   0x0013428B : fcvt.lns.s l5, f6 with rs2 = 1        (would set l5 to +0, f6 is 0.0)
     //   0x0013528B : fcvt.s.lns f5, l6 with rs2 = 1        (would set f5 to 0.0, l6 is +0)
+    //   0x0081628B : old custom-0 llw l5, 8(x2) slot      (would load a word into l5)
+    //   0x008132AB : custom-1 (llw opcode) with funct3 = 011
     auto vm = runProgram(loadFloat(1, 2.0f) + loadFloat(5, 3.0f) +
                              "fcvt.lns.s l1, f1\n"
                              "fcvt.lns.s l5, f1\n",
-                         {0x0431008Bu, 0x0013428Bu, 0x0013528Bu});
+                         {0x0431008Bu, 0x0013428Bu, 0x0013528Bu, 0x0081628Bu, 0x008132ABu});
     auto &r = vm->registers_;
     const lns::LnsWord two = lns::pack(false, 1 << lns::kFracBits);
     EXPECT_EQ(r.ReadLns(1), two);
@@ -589,7 +591,7 @@ TEST(LnsInstructions, MachineCodeAndDisassembly)
     const std::vector<uint32_t> expected = {
         0x0031008B, 0x0031108B, 0x0031208B, 0x0031308B, 0x0231008B, 0x0231108B,
         0x0003428B, 0x0003528B,
-        0x0081628B, 0x0051740B, 0xFFC1628B, 0xFE517E0B, (18u << 20) | (11u << 15) | (10u << 7) | 0x0B,
+        0x008122AB, 0x0051245B, 0xFFC122AB, 0xFE512E5B, (18u << 20) | (11u << 15) | (10u << 7) | 0x0B,
     };
     const std::vector<std::string> disassembly = {
         "ladd l1, l2, l3",    "lsub l1, l2, l3",    "lmul l1, l2, l3",
@@ -608,4 +610,10 @@ TEST(LnsInstructions, MachineCodeAndDisassembly)
     EXPECT_TRUE(Kites::instruction_set::isWellFormedLnsInstruction(0x0231008Bu));
     EXPECT_TRUE(Kites::instruction_set::isWellFormedLnsInstruction(0x0231108Bu));
     EXPECT_FALSE(Kites::instruction_set::isWellFormedLnsInstruction(0x0431008Bu));
+    // llw / lsw live on custom-1 / custom-2 with funct3 = 010; the old custom-0 funct3 110 / 111
+    // slots and other funct3 values on the new opcodes are reserved.
+    EXPECT_FALSE(Kites::instruction_set::isWellFormedLnsInstruction(0x0081628Bu));
+    EXPECT_FALSE(Kites::instruction_set::isWellFormedLnsInstruction(0x0051740Bu));
+    EXPECT_FALSE(Kites::instruction_set::isWellFormedLnsInstruction(0x008132ABu));
+    EXPECT_FALSE(Kites::instruction_set::isWellFormedLnsInstruction(0x0051345Bu));
 }

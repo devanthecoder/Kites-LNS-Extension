@@ -193,8 +193,8 @@ std::unordered_map<Instruction, InstructionEncoding> instruction_encoding_map = 
     {Instruction::kldiv, {0b0001011, -1, 0b011, -1, -1, 0b0000000}},
     {Instruction::kfcvt_lns_s, {0b0001011, -1, 0b100, -1, -1, 0b0000000}},
     {Instruction::kfcvt_s_lns, {0b0001011, -1, 0b101, -1, -1, 0b0000000}},
-    {Instruction::kllw, {0b0001011, -1, 0b110, -1, -1, -1}},
-    {Instruction::klsw, {0b0001011, -1, 0b111, -1, -1, -1}},
+    {Instruction::kllw, {0b0101011, -1, 0b010, -1, -1, -1}},
+    {Instruction::klsw, {0b1011011, -1, 0b010, -1, -1, -1}},
     {Instruction::kladdc, {0b0001011, -1, 0b000, -1, -1, 0b0000001}},
     {Instruction::klsubc, {0b0001011, -1, 0b001, -1, -1, 0b0000001}},
     {Instruction::kfcvt_lns_w, {0b0001011, -1, 0b100, 0b00000, -1, 0b0000010}},
@@ -572,8 +572,8 @@ std::unordered_map<std::string, LnsInstructionEncoding> lns_instruction_encoding
     {"ldiv", {kLnsOpcode, 0b011, 0b0000000}},       // O_LNS_C_LNS_C_LNS
     {"fcvt.lns.s", {kLnsOpcode, 0b100, 0b0000000}}, // O_LNS_C_FPR (rs2 = 0)
     {"fcvt.s.lns", {kLnsOpcode, 0b101, 0b0000000}}, // O_FPR_C_LNS (rs2 = 0)
-    {"llw", {kLnsOpcode, 0b110, 0b0000000}},        // O_LNS_C_I_LP_GPR_RP (I-type)
-    {"lsw", {kLnsOpcode, 0b111, 0b0000000}},        // O_LNS_C_I_LP_GPR_RP (S-type)
+    {"llw", {kLnsLoadOpcode, 0b010, 0b0000000}},    // O_LNS_C_I_LP_GPR_RP (I-type, custom-1)
+    {"lsw", {kLnsStoreOpcode, 0b010, 0b0000000}},   // O_LNS_C_I_LP_GPR_RP (S-type, custom-2)
     {"laddc", {kLnsOpcode, 0b000, 0b0000001}},      // CORDIC LNS add, R-type
     {"lsubc", {kLnsOpcode, 0b001, 0b0000001}},      // CORDIC LNS subtract, R-type
     {"fcvt.lns.w", {kLnsOpcode, 0b100, 0b0000010, 0b00000}},   // O_LNS_C_GPR, int -> LNS
@@ -1195,18 +1195,22 @@ bool isValidLnsStoreInstruction(const std::string &instruction)
 
 bool isLnsInstruction(uint32_t instruction)
 {
-    return (instruction & 0x7F) == kLnsOpcode;
+    const uint32_t opcode = instruction & 0x7F;
+    return opcode == kLnsOpcode || opcode == kLnsLoadOpcode || opcode == kLnsStoreOpcode;
 }
 
 bool isWellFormedLnsInstruction(uint32_t instruction)
 {
     if (!isLnsInstruction(instruction))
         return false;
+    const uint32_t opcode = instruction & 0x7F;
     const uint32_t funct3 = (instruction >> 12) & 0b111;
     const uint32_t rs2 = (instruction >> 20) & 0b11111;
     const uint32_t funct7 = (instruction >> 25) & 0b1111111;
+    if (opcode != kLnsOpcode)
+        return funct3 == 0b010; // llw / lsw (their top bits are the immediate)
     if (funct3 >= 0b110)
-        return true; // llw / lsw
+        return false;
     if (funct7 == 0)
         return funct3 <= 0b011 || rs2 == 0;
     if (funct7 == 2)
@@ -1528,9 +1532,7 @@ std::string disassemble(uint32_t instruction)
     {
 
     case 0b0001011:
-    { // custom-0: LNS extension
-        const int32_t offI = signext((int32_t)(instruction >> 20), 12);
-        const int32_t offS = signext((funct7 << 5) | rd, 12);
+    { // custom-0: LNS extension (R-type)
         switch (funct3)
         {
         case 0b000:
@@ -1569,12 +1571,24 @@ std::string disassemble(uint32_t instruction)
             if (funct7 != 0 || rs2 != 0)
                 break;
             return "fcvt.s.lns " + fr(rd) + ", " + lr(rs1);
-        case 0b110:
-            return "llw " + lr(rd) + ", " + std::to_string(offI) + "(" + xr(rs1) + ")";
-        case 0b111:
-            return "lsw " + lr(rs2) + ", " + std::to_string(offS) + "(" + xr(rs1) + ")";
         }
         break;
+    }
+
+    case 0b0101011:
+    { // custom-1: LNS load
+        if (funct3 != 0b010)
+            break;
+        const int32_t offI = signext((int32_t)(instruction >> 20), 12);
+        return "llw " + lr(rd) + ", " + std::to_string(offI) + "(" + xr(rs1) + ")";
+    }
+
+    case 0b1011011:
+    { // custom-2: LNS store
+        if (funct3 != 0b010)
+            break;
+        const int32_t offS = signext((funct7 << 5) | rd, 12);
+        return "lsw " + lr(rs2) + ", " + std::to_string(offS) + "(" + xr(rs1) + ")";
     }
 
     case 0b0110011:

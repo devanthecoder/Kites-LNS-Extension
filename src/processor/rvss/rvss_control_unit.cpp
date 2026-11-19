@@ -134,25 +134,27 @@ void RVSSControlUnit::SetControlSignals(uint32_t instruction)
         break;
     }
 
-    case 0b0001011:
-    { // custom-0: LNS extension (reserved encodings leave every signal low, i.e. a no-op)
+    case 0b0001011: // custom-0: LNS R-type (arithmetic, CORDIC add/sub, conversions)
+    case 0b0101011: // custom-1: LLW
+    case 0b1011011: // custom-2: LSW
+    { // reserved encodings leave every signal low, i.e. a no-op
         if (!instruction_set::isWellFormedLnsInstruction(instruction))
         {
             break;
         }
-        switch ((instruction >> 12) & 0b111)
+        switch (instruction & 0b1111111)
         {
-        case 0b110: // LLW
+        case 0b0101011: // LLW
             alu_src_ = true;
             mem_to_reg_ = true;
             reg_write_ = true;
             mem_read_ = true;
             break;
-        case 0b111: // LSW
+        case 0b1011011: // LSW
             alu_src_ = true;
             mem_write_ = true;
             break;
-        default: // arithmetic, CORDIC add/sub, and conversions
+        default:
             reg_write_ = true;
             break;
         }

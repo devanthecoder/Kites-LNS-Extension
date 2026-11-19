@@ -415,10 +415,25 @@ void RVSSProcessor::ExecuteLns()
         return; // reserved custom-0 encoding: no-op
     }
 
+    const uint8_t opcode = current_instruction_ & 0b1111111;
     const uint8_t funct3 = (current_instruction_ >> 12) & 0b111;
     const uint8_t funct7 = (current_instruction_ >> 25) & 0b1111111;
     const uint8_t rs1 = (current_instruction_ >> 15) & 0b11111;
     const uint8_t rs2 = (current_instruction_ >> 20) & 0b11111;
+
+    if (opcode == instruction_set::kLnsLoadOpcode)
+    { // LLW (custom-1): address = x[rs1] + sext(imm[11:0])
+        const int32_t imm = static_cast<int32_t>(current_instruction_) >> 20;
+        execution_result_ = static_cast<int64_t>(registers_.ReadGpr(rs1) + static_cast<int64_t>(imm));
+        return;
+    }
+    if (opcode == instruction_set::kLnsStoreOpcode)
+    { // LSW (custom-2): address = x[rs1] + sext({imm[11:5], imm[4:0]})
+        const int32_t imm = (static_cast<int32_t>(current_instruction_ & 0xFE000000) >> 20) |
+                            static_cast<int32_t>((current_instruction_ >> 7) & 0b11111);
+        execution_result_ = static_cast<int64_t>(registers_.ReadGpr(rs1) + static_cast<int64_t>(imm));
+        return;
+    }
 
     if (funct7 == 0b0000001 && funct3 <= 0b001)
     {
@@ -498,20 +513,6 @@ void RVSSProcessor::ExecuteLns()
         execution_result_ = static_cast<int64_t>(
             lns::defaultConverter().toFloatBits(registers_.ReadLns(rs1)));
         break;
-    case 0b110: // LLW: address = x[rs1] + sext(imm[11:0])
-    {
-        const int32_t imm = static_cast<int32_t>(current_instruction_) >> 20;
-        execution_result_ = static_cast<int64_t>(registers_.ReadGpr(rs1) + static_cast<int64_t>(imm));
-        break;
-    }
-    case 0b111: // LSW: address = x[rs1] + sext({imm[11:5], imm[4:0]})
-    {
-        const int32_t imm = (static_cast<int32_t>(current_instruction_ & 0xFE000000) >> 20) |
-                            static_cast<int32_t>((current_instruction_ >> 7) & 0b11111);
-        execution_result_ = static_cast<int64_t>(registers_.ReadGpr(rs1) + static_cast<int64_t>(imm));
-        (void)rs2;
-        break;
-    }
     default:
         break;
     }
@@ -1123,22 +1124,24 @@ void RVSSProcessor::WriteBackLns()
         return; // lsw, or a reserved custom-0 encoding
     }
 
+    const uint8_t opcode = current_instruction_ & 0b1111111;
     const uint8_t funct3 = (current_instruction_ >> 12) & 0b111;
     const uint8_t funct7 = (current_instruction_ >> 25) & 0b1111111;
     const uint8_t rd = (current_instruction_ >> 7) & 0b11111;
+    const bool isLoad = opcode == instruction_set::kLnsLoadOpcode;
 
     uint64_t old_reg = 0;
     uint64_t new_reg = 0;
     unsigned int reg_type = 3; // LNS
 
-    if (funct3 == 0b101 && funct7 == 0b0000010)
+    if (!isLoad && funct3 == 0b101 && funct7 == 0b0000010)
     { // FCVT.{W,WU,L,LU}.LNS writes an integer into a GPR
         reg_type = 0;
         old_reg = registers_.ReadGpr(rd);
         registers_.WriteGpr(rd, static_cast<uint64_t>(execution_result_));
         new_reg = registers_.ReadGpr(rd); // x0 ignores the write
     }
-    else if (funct3 == 0b101)
+    else if (!isLoad && funct3 == 0b101)
     { // FCVT.S.LNS writes an FP32 value into an FPR
         reg_type = 2;
         old_reg = registers_.ReadFpr(rd);
@@ -1147,7 +1150,7 @@ void RVSSProcessor::WriteBackLns()
     }
     else
     {
-        const int64_t value = (funct3 == 0b110) ? memory_result_ : execution_result_;
+        const int64_t value = isLoad ? memory_result_ : execution_result_;
         old_reg = registers_.ReadLns(rd);
         registers_.WriteLns(rd, static_cast<uint32_t>(static_cast<uint64_t>(value) & 0xFFFFFFFF));
         new_reg = registers_.ReadLns(rd); // l0 ignores the write

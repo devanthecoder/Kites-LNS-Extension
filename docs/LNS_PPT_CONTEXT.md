@@ -89,6 +89,26 @@ Read all three (use a PDF reader / `pdftotext -layout`); where they differ from 
 
 ---
 
+## 0A. PRESENTATION GUIDELINES (from the course; BINDING, they override anything else in this file)
+
+1. Each presentation is **STRICTLY 10 minutes + 5 minutes Q&A**. Focus only on the important points worth discussing.
+2. Plan: **no conceptual background unless absolutely necessary.** **Max 7 minutes** explaining what was done and any results/improvements (finish early if there is not much to present). Use the **last 3 minutes** for ALL of the following:
+   - uniqueness / novelty of the work
+   - number of lines of code written
+   - main contribution of each team member
+   - verification approach and number of test cases
+   - key learnings
+   - major challenges encountered
+   - drawbacks / limitations of the implementation
+
+Consequences for the deck (this is why section 9 below is a short timed plan):
+- **About 9-10 slides in total** (5-7 for the 7-minute "what we did and results" part, 3 for the closing 3 minutes), plus a backup slide. Roughly one slide per minute; no slide that cannot be explained in about a minute. Put detail in speaker notes and the backup slide, not in the main flow.
+- **The "who did what" ban in section 10 is lifted for ONE slide:** the guidelines explicitly ask for each member's main contribution, so include it there (and only there).
+- The conceptual explainer of LNS must be cut to a few lines on the format slide. Do not spend a slide on it.
+- Every number for the closing slides is in section 7A (lines of code, test cases, contributions, challenges, limitations, novelty). Use them; do not invent others.
+
+---
+
 ## 1. One-paragraph summary (use for the title/intro slide)
 
 We extended the **KITES** RISC-V simulator (C++20 / Qt) with a **Logarithmic Number System (LNS)** instruction-set extension: a 32-bit LNS word (sign plus a fixed-point log2 of the magnitude), its own 32-entry register file `l0`-`l31`, its own opcodes, and 14 instructions (20 mnemonics) covering conversions to/from FP32 and integers, add/sub (two methods: a lookup-table ALU and a table-free hyperbolic CORDIC unit), multiply/divide (exact: just add/subtract the logs), and exponentiation (`lpow`, `lpown`). It runs on the single-cycle RVSS processor with GUI, undo/redo, CLI, assembler, disassembler and 25 automated tests. We evaluated it with a Lennard-Jones energy benchmark (27 atoms, 351 pairs) against an FP32 control, sweeping lookup-table sizes to trade accuracy against memory, and measured per-operation accuracy and cost. Result: with a well-sized add/sub table or CORDIC, LNS reaches accuracy comparable to FP32 on this benchmark, uses about 7% fewer instructions, and multiplication/division/powers become trivially cheap, while addition/subtraction remain the expensive, accuracy-limiting operations (exactly the trade-off the proposal predicted).
@@ -105,7 +125,7 @@ We extended the **KITES** RISC-V simulator (C++20 / Qt) with a **Logarithmic Num
   1. **Stage 1, Proposal** (Oct/early Nov 2026, final version submitted ~3 Nov).
   2. **Stage 2, Implementation-1** report (due Mon 9 Nov 2026, 11:59 PM).
   3. **Stage 3, Implementation-2** report (due Thu 19 Nov 2026, 23:59; whether it was submitted on time is not confirmed in this file; ask).
-  4. **Final stage / showcase** (a project showcase has happened once already; the PPT you are making is for the final presentation. Date/length/template unknown).
+  4. **Final stage / showcase** (a project showcase has happened once already; the PPT you are making is for the final presentation: 10 min + 5 min Q&A, see section 0A).
 
 ### 2.1 What the proposal (Stage 1) promised, verbatim content
 Title: "Project Proposal: Logarithmic Number System (LNS) Extension for the KITES Simulator". Objective: in LNS a real number is stored as its sign together with the logarithm of its magnitude, so multiplication and division reduce to addition and subtraction, while addition and subtraction become the expensive operations. Extend KITES with a custom ISA around LNS: interconversion with the existing integer and floating-point representations plus instructions that perform arithmetic directly on LNS values; then quantitatively compare against the pre-existing representations in **runtime, accuracy and memory cost**, and determine whether LNS gives a significant improvement over FP and integer in select application fields.
@@ -151,7 +171,7 @@ Stage-3 "Pending": full Lennard-Jones simulation, cycle-cost runtime comparison,
 
 ---
 
-## 3. What LNS is (for the explainer slide)
+## 3. What LNS is (background; the course says skip conceptual background, so use at most a few lines)
 
 A real number x is stored as sign S and L = log2|x|. Then:
 - x*y: add the logs (L_x + L_y), XOR the signs. x/y: subtract. x^n: multiply the log by n. sqrt: halve the log. All trivial integer ops.
@@ -325,6 +345,68 @@ KITES runs FP32 ops on the **host's FPU** (one hardware instruction) but runs LN
 
 ---
 
+## 7A. Numbers and statements for the closing 3 minutes (section 0A items)
+
+Counts are from `git diff --numstat` against the upstream merge-base (`8da3973`) on the repo state of 20 Nov 2026. Re-run to refresh: `git -c core.autocrlf=true diff --numstat 8da397341af803514da26a1e5ace33177b4a7ae2 HEAD`.
+
+### 7A.1 Lines of code written (new lines added to the upstream codebase)
+| Part | Lines added |
+| --- | --- |
+| LNS library (`src/processor/lns/`: converter, ALU, CORDIC, pow, format) | about 1,615 |
+| Simulator integration (assembler, instruction definitions, control unit, processor, registers, GUI, language service, `instructions.json`) | about 1,161 |
+| Tests (`test/lns_instruction_test.cpp`) | 773 |
+| Check / model tools (`tools/`) | about 1,149 |
+| Benchmark (`examples/lns_lj/`: generator, 3 assembly programs, sweep script) | about 664 |
+| **Total code** | **about 5,360 lines** |
+| Documentation and handoff files | about 700 more lines |
+
+The change to existing upstream code is small: **11 lines removed or replaced** in total; everything else is additions, in new files plus hooks in about 25 existing files. Say "about 5,400 lines of new code, almost all in new files". The `.s` programs are partly generated; the generator itself is 263 lines.
+
+### 7A.2 Novelty / uniqueness (state carefully, "to our knowledge")
+- An LNS instruction-set extension for the KITES simulator with its **own register file, ABI and opcode space** (three custom opcodes) and full tool support: assembler, disassembler, GUI, CLI/JSON, undo/redo, profiler class. It runs real programs, not just a standalone library.
+- **Two interchangeable add/sub implementations selectable per instruction** (`ladd` table vs `laddc` CORDIC), so the accuracy / memory / latency trade-off is measured on the same program.
+- **Runtime-resizable tables** (no recompiling) for systematic table-size sweeps.
+- **Exact integer power** `lpown` (a power is one multiply of the log), which cut the benchmark's instruction count.
+- **Bit-exact model** of the benchmark: a separate C++ program reproduces the simulator's final register word exactly, which makes the accuracy sweeps trustworthy.
+- Quantified result: an 8-bit-converter CORDIC LNS beats FP32 energy accuracy (3.1e-7 vs 5.3e-7) with about 4 KiB of tables.
+
+### 7A.3 Main contribution of each team member (required by the guidelines; one line each; confirm the wording with both people)
+- **Devadath Sabarish (CO24BTECH11006):** conversion unit (FP32 and integer <-> LNS), ISA design and encoding, simulator integration (assembler, control unit, processor, registers, GUI, undo/redo), exponentiation instructions, test suite, Lennard-Jones benchmark, accuracy tools and measurements.
+- **Sheshadri Rathan C S (ES24BTECH11030):** the LNS arithmetic unit (multiply/divide and table-based add/subtract with the log-spaced correction table) and the hyperbolic CORDIC add/subtract unit, plus the instruction/ABI summary document.
+
+Speaker caveat: git commit counts (25 vs 4) understate Sheshadri's share, because the ALU was later moved into `src/processor/lns/` and refactored into the shared library during integration. Do not put commit counts on a slide.
+
+### 7A.4 Verification approach and number of test cases
+- **25 automated GoogleTest cases** in `test/lns_instruction_test.cpp` (773 lines): every instruction run on the real single-cycle processor and compared with the library result, plus special values (zero, Inf, NaN), saturation, integer-convert edge cases, exactness, l0/x0 handling, reserved encodings as no-ops, undo/redo, machine code and disassembly.
+- Library accuracy checks over 65,536 random inputs per configuration (check programs in `tools/`).
+- End-to-end: the Lennard-Jones programs run in the simulator, and the benchmark model matches the simulator's final word **bit for bit** for every configuration tried.
+- Full repository suite after our changes: 328 run, 322 pass, 1 skipped; the 5 failures (`FpFmaConversion.DoublePrecisionFma`) fail on upstream too and are unrelated.
+
+### 7A.5 Key learnings (reuse the list in section 2.3)
+1. In LNS the cost moves from multiply/divide to add/subtract, so the add/sub implementation decides the whole system.
+2. The add/sub table size, not the converter size, determines final accuracy (converter 6 to 13 bits barely changes the benchmark error; ALU table 256 to 64K changes it by four orders of magnitude).
+3. CORDIC trades memory for latency: FP32-class accuracy with essentially no table, but about 7x the per-op cost of the default table.
+4. A power is one multiply of the log: `lpown(r2,-3)` replaced a divide and two multiplies and cut the benchmark by 7.3%.
+5. Simulator wall-clock time cannot compare LNS with FP32 hardware (host FPU vs software emulation); a cycle-cost model is the right tool.
+6. Near-cancellation in subtraction magnifies conversion rounding.
+
+### 7A.6 Major challenges
+- Designing the encoding: the first 8-instruction encoding left no room for integer converts and exponentiation, so we redesigned it (dedicated opcodes for load/store, a funct7 "alternates" page) while keeping earlier programs valid.
+- **Add/subtract accuracy against memory:** the correction function changes quickly for small differences, so uniform tables need to be huge; we moved to a log-spaced table with interpolation and added a table-free CORDIC alternative.
+- **Measuring honestly:** simulator time did not reflect hardware cost, so we separated accuracy/instruction-count results from timing and planned a cycle-cost model.
+- Integrating into a large existing codebase while changing as little upstream code as possible (11 lines).
+- Special values and saturation (zero, Inf, NaN have no natural encoding in a log format) and keeping tests, library and simulator exactly consistent.
+
+### 7A.7 Drawbacks and limitations (be upfront)
+- Single-cycle RVSS only; the 5-stage pipelines (RV5S) do not support LNS.
+- No hardware timing: results are accuracy, memory and instruction counts; the cycle-cost comparison is pending. No FPGA testing.
+- Add/subtract is expensive and inexact: accuracy needs a large table (hundreds of KiB for FP32-class) or slow CORDIC; subtraction near cancellation loses accuracy.
+- No LNS compare/branch, no bitwise operations, no FP64 conversions, no flags/status register, no compiler support, so programs are hand-written assembly.
+- The full Lennard-Jones molecular-dynamics application is not done; the current benchmark is energy-only (27 atoms).
+- Benchmarks run on a software emulation, so LNS looks slower than FP32 in wall-clock terms; that is an artifact, but we cannot yet quantify the hardware gain.
+
+---
+
 ## 8. Status: done vs remaining (as of 20 Nov 2026)
 
 **Done:** the whole ISA (14 instructions) in assembler/disassembler/RVSS/GUI/CLI/JSON/undo-redo; two add/sub methods; exact mul/div/integer-power; conversions with integer types; 25 tests; check tools; LJ energy benchmark with FP32 control, table sweep, CORDIC variant, bit-exact model; Stage-1/2/3 reports; docs rewritten for the final ISA (`docs/LNS_EXTENSION.md`).
@@ -341,28 +423,28 @@ KITES runs FP32 ops on the **host's FPU** (one hardware instruction) but runs LN
 
 ---
 
-## 9. Suggested deck structure (adapt to the slot length once known; section 12)
+## 9. Deck structure and timing (10 min talk + 5 min Q&A; follows section 0A)
 
-Roughly 10-14 slides for a 10-15 min talk:
-1. **Title:** "LNS Extension for the KITES Simulator", both names and roll numbers, course.
-2. **Motivation / what is LNS:** sign + log; mul/div become add/sub; add/sub is the hard part (section 3 formulas).
-3. **Goals and plan:** the proposal's must-haves and stretch goals (section 2.1); phases.
-4. **Number format and registers:** Q9.22 diagram (1 sign bit | 9.22 fixed-point log), special values table, 32 L registers + ABI.
-5. **The ISA:** the encoding table (section 5.1), three custom opcodes, funct7 "pages", reserved = no-op.
-6. **How it plugs into KITES:** pipeline diagram (assembler -> control unit -> ExecuteLns -> WriteBackLns -> GUI/undo), what was changed (section 6.2).
-7. **Arithmetic implementation:** exact mul/div/pow; add/sub formula; table (log-spaced + interpolation) vs CORDIC; conversions with two tables.
-8. **Verification:** 3 levels, 25 tests, bit-exact model, worked example (section 6.5); a GUI screenshot only if Sheshadri can take one.
-9. **Results 1, per-op accuracy vs table size:** the add/sub error curve (256 -> 4M entries) with FP32 rounding and CORDIC reference lines; time curve alongside (section 7.2).
-10. **Results 2, LJ benchmark:** error vs table memory plot (section 7.1 table), FP32 line at 5.3e-7, CORDIC point at 1.4e-7; instruction count bar 30,488 vs 28,252.
-11. **Honest caveat:** why simulator time is not a hardware comparison, cycle-cost model next (section 7.3).
-12. **What changed from the plan:** the status table (section 2.3).
-13. **Learnings / insights** (section 2.3 list).
-14. **Pending and future work:** full LJ MD in LNS with energy drift; cycle-cost model; docs; future scope (flags/status CSR, compiler support, bitwise ops, pipelines, FPGA).
-15. **LLM disclosure** (if the course wants one on slides) and Q&A.
+Target: title + 9 slides + 1 backup, about 10 minutes. Time budget in brackets.
 
-Charts: make them yourself from the numbers above (log-scale axes for error and table size; consistent colors: FP32 = grey reference line, table = one color, CORDIC = second color). If the course/template wants images from the Stage-3 report, ask Devadath for the PDF.
+**Part A: what we did and results (max 7 min)**
+1. **Title + one-line pitch** (15 s): "LNS Extension for the KITES Simulator", names, roll numbers. Pitch: sign + log2 magnitude, so multiply/divide/power become integer add/sub/multiply; we added the ISA, two add/sub implementations, and measured the accuracy/memory trade-off.
+2. **Number format and registers** (45 s): Q9.22 bit diagram, specials, 32 L registers; one line on why (mul = add of logs, add/sub is the hard part). This is the only conceptual content.
+3. **The ISA** (60 s): 14 instructions / 20 mnemonics on custom-0/1/2, the funct3/funct7 table (section 5.1), reserved = no-op.
+4. **Integration into KITES** (60 s): flow diagram assembler -> control unit -> ExecuteLns -> WriteBackLns -> GUI/undo/CLI; RVSS only (section 6.2).
+5. **Arithmetic implementation: two add/sub methods** (75 s): table (log-spaced + interpolation) vs hyperbolic CORDIC; exact mul/div/lpown; conversions with two tables.
+6. **Result 1, per-operation accuracy vs table size** (60 s): add/sub worst-case error vs entries with FP32 rounding line and CORDIC; time on the same slide (section 7.2).
+7. **Result 2, Lennard-Jones benchmark** (75 s): energy error vs table memory (section 7.1), FP32 reference at 5.3e-7, CORDIC at 1.4e-7; instruction count 30,488 (FP32) vs 28,252 (LNS, 7.3% fewer). One sentence: why wall-clock simulator time is not a hardware comparison (section 7.3).
 
-Likely Q&A the presenters should be ready for (answers in this file): why signed unbiased log? why Q9.22? why does add/sub need a table? why is the LNS faster in instruction count but not wall-clock? how would this look in hardware? what is CORDIC and why repeats at 4/13/40? what limits accuracy (table size vs converter)? why no compare/branch? why RVSS only? how do you test it? what is the near-cancellation problem?
+**Part B: the closing 3 minutes (all seven items are mandatory)**
+8. **Novelty + lines of code + contributions** (45 s): 7A.2, 7A.1, 7A.3.
+9. **Verification** (30 s): 3 levels, 25 test cases, bit-exact benchmark model (7A.4).
+10. **Learnings, challenges, limitations** (75 s, one slide in three columns): 7A.5 to 7A.7. Close with one line on what is pending (full LJ MD in LNS, cycle-cost model).
+11. **Backup (only for Q&A):** status vs proposal table (section 2.3), converter accuracy plots, near-cancellation caveat, hardware view of each op, CORDIC details, LLM disclosure line if the course wants it.
+
+Charts: build from the section 7 numbers; log-scale axes for error and table size; FP32 = grey reference line, table = one colour, CORDIC = second colour. Write as "we are telling others what we did" (section 10).
+
+Likely Q&A to prepare (5 minutes; answers are in this file): why signed unbiased log; why Q9.22; why add/sub needs a table; how would this look in hardware; what is CORDIC and why repeats at 4/13/40; what limits accuracy (add/sub table, not converter); why no compare/branch; why RVSS only; why not compare wall-clock time; what is the near-cancellation problem; what changes if the table doubles.
 
 ---
 
@@ -372,7 +454,7 @@ These came from Devadath's feedback on the reports; follow them unless Sheshadri
 - **Blunt and direct, no fluff.** Short sentences; summarise rather than dumping every detail.
 - **No internal minutiae on slides:** no directory paths, file names, environment variable names, hex machine words (except where an encoding table needs them), "no Qt" remarks, build gotchas.
 - **Write as "we are telling others what we did."** Never as notes to yourself, never "verified by Claude", never mention prompts/instructions given to an AI (e.g. "we were told not to edit the original code" must not appear).
-- **Do not state who on the team did what** (default); do not name the AI tool by brand: say "LLMs".
+- **Do not state who on the team did what, EXCEPT on the single "main contribution of each member" slide the course guidelines require (section 0A, 7A.3).** Do not name the AI tool by brand: say "LLMs".
 - **Do not invent jargon** (e.g. "log step"). Report errors as relative error and compare with FP32 rounding (about 6e-8).
 - Keep results compact; learnings must be genuine insights (what we found and how it changed what we did).
 - Only mention pending items that matter to an audience (full LJ MD, cycle-cost model, documentation), not internal to-dos.
@@ -397,9 +479,9 @@ Standing project rules (affect any repo work you might be asked to do): do not t
 ## 12. Open questions: ASK SHESHADRI (or Devadath) BEFORE building, in a single short message
 
 You may start drafting the structure while waiting, but get these answered before polishing:
-1. When is the presentation, how many minutes, and is there a **template, slide limit or grading rubric**? (If a rubric exists, paste it; reshape the outline to its headings.)
+1. ~~Length and rubric~~ **ANSWERED: 10 min + 5 min Q&A, structure in section 0A.** Still ask: **date and time, and whether there is a slide template.**
 2. Who presents which part? (Only affects speaker notes; do not put names on content slides unless told.)
-3. May slides name who built which part? (Default: no.)
+3. ~~May slides name who built which part?~~ **ANSWERED: yes, on the one contribution slide (guidelines require it).** Ask only to confirm the wording in 7A.3.
 4. Was the Stage-3 report submitted on time, and is its status table final? (Affects "what changed from the plan".)
 5. Should the dedicated extension be shown as **Done** or **Partial** (no flags/status CSR, no compiler support)? Default used so far: Done.
 6. Does the deck need an LLM-disclosure slide, and does it need a line for the CORDIC unit?
@@ -412,6 +494,6 @@ You may start drafting the structure while waiting, but get these answered befor
 ## 13. What to do after reading (checklist)
 1. Run section 0 and report the access results to Sheshadri in a few lines.
 2. Ask the section 12 questions in one message (do not ask them one at a time).
-3. Draft the outline from section 9, adjusted to the answers; show the outline before building all slides.
+3. Draft the outline from section 9 (it already follows the course's 10 + 5 minute rules in section 0A), adjusted to the answers; show the outline before building all slides.
 4. Build the deck; make charts from the section 7 data; check every number against this file; do not invent numbers.
-5. Final check: no claims about RV5S/FP64/FPGA/hardware timing; no brand names for the LLM; no internal paths; error/size axes on log scale; instruction count says "14 instructions (20 mnemonics)".
+5. Final check: the talk fits 10 minutes (about 1 slide per minute, 7 min on work/results, 3 min on the closing items); all seven closing items from section 0A are covered; no claims about RV5S/FP64/FPGA/hardware timing; no brand names for the LLM; no internal paths; error/size axes on log scale; instruction count says "14 instructions (20 mnemonics)".

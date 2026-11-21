@@ -129,9 +129,16 @@ the defaults unchanged.
 - `test/lns_instruction_test.cpp`: 25 GoogleTest cases (RVSS) checking every instruction against
   the library, special values, reserved encodings, undo/redo, machine code and disassembly.
 - `tools/` (plain C++, no Qt; build lines in each file's header):
-  `lns_conversion_check.cpp`, `lns_alu_check.cpp` (accuracy and table-size sweeps),
-  `lns_pow_check.cpp` (`lpow` accuracy vs `2^f` table size, `lpown` exactness),
-  `lns_lj_accuracy.cpp` (Lennard-Jones accuracy model).
+  - Checks: `lns_conversion_check.cpp`, `lns_alu_check.cpp` (accuracy and table-size sweeps),
+    `lns_pow_check.cpp` (`lpow` accuracy vs `2^f` table size, `lpown` exactness),
+    `lns_lj_accuracy.cpp` (Lennard-Jones accuracy model).
+  - Microbenchmarks, which call the library directly on random inputs spread over each table:
+    `lns_table_sweep.cpp` (`ladd` / `lsub` error and time vs correction samples, conversions
+    and `lpow` vs LUT bits), `lns_conversion_sweep.cpp` (relative error and time of the FP32
+    conversions vs LUT bits, with plain FP32 rounding as reference), `lns_cordic_bench.cpp`
+    (`laddc` / `lsubc` on the same inputs as the table sweep) and `lns_op_bench.cpp` (time of
+    the operations that do not depend on table size). Their times are host time of the library:
+    they compare LNS configurations with each other, not LNS with FP32 hardware.
 
 ## Lennard-Jones benchmark
 

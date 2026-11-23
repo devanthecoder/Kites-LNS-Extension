@@ -17,7 +17,10 @@
 # Environment:
 #   KITES_CLI  Release kites-cli             (default: <repo>/build-bench/kites-cli)
 #   MD_MODEL   tools/lns_lj_md_model binary  (default: <repo>/lns_lj_md_model)
-#   JOBS       parallel runs                 (default 8)
+#   JOBS       parallel runs at most         (default 8)
+#   MEM_BUDGET_MB  memory for all running runs (default: MemAvailable - 1.5 GB). kites-cli keeps
+#              its whole undo history, about 2.4 MB per simulated step, so a run is only started
+#              when its estimated peak (MEM_BASE_MB + MEM_PER_STEP_KB * steps) fits the budget.
 #   WORK       work directory, kept to resume (default: $HOME/lns_lj_md_work)
 #   RUN_TMP    where kites-cli runs (default: /tmp/lns_lj_md_runs). kites-cli rewrites its vm_state
 #              files throughout a run, so on WSL a RAM-backed /tmp makes it about 5x faster than
@@ -31,6 +34,8 @@ REPO="$(cd "$HERE/../.." && pwd)"
 KITES_CLI="${KITES_CLI:-$REPO/build-bench/kites-cli}"
 MD_MODEL="${MD_MODEL:-$REPO/lns_lj_md_model}"
 JOBS="${JOBS:-8}"
+MEM_BASE_MB="${MEM_BASE_MB:-80}"
+MEM_PER_STEP_KB="${MEM_PER_STEP_KB:-2600}" # measured: ~2.35 MB per step for 27 atoms
 WORK="${WORK:-$HOME/lns_lj_md_work}"
 RUN_TMP="${RUN_TMP:-/tmp/lns_lj_md_runs}"
 OUT="${OUT:-$HERE/results}"
@@ -39,7 +44,7 @@ LOG_EVERY=5
 LOG_ADDR=100003D8 # 'log' in .data: 0x10000000 + dt, nsteps, logint (12 B) + pos, vel, frc (3 x 324 B)
 WORDS=84          # words per log record
 
-# ---- one run (called through xargs) ----
+# ---- one run (started by the scheduler below) ----
 if [[ "${1:-}" == "--one" ]]; then
     name="$2" variant="$3" lb="$4" eb="$5" ns="$6" dt="$7" steps="$8"
     progs="$WORK/progs/dt${dt}_n${steps}"
@@ -65,10 +70,10 @@ if [[ "${1:-}" == "--one" ]]; then
         export LNS_LOG_LUT_BITS="$lb" LNS_EXP_LUT_BITS="$eb" LNS_ALU_CORRECTION_SAMPLES="$ns"
         start=$(date +%s.%N)
         if ((count)); then
-            "$KITES_CLI" prog.s --vm rvss --mem-dump "$LOG_ADDR" "$rows" 2>&1 >stdout.txt |
+            "$KITES_CLI" prog.s --vm rvss --mem-dump "$LOG_ADDR" "$rows" 2>&1 >/dev/null |
                 python3 "$ANALYZE" count vm_state/disassembly.txt >counts.csv
         else
-            "$KITES_CLI" prog.s --vm rvss --mem-dump "$LOG_ADDR" "$rows" >stdout.txt 2>/dev/null
+            "$KITES_CLI" prog.s --vm rvss --mem-dump "$LOG_ADDR" "$rows" >/dev/null 2>/dev/null
         fi
         awk -v a="$start" -v b="$(date +%s.%N)" 'BEGIN {printf "%.2f\n", b - a}' >seconds.txt
     ) || { echo "kites-cli failed: $tmp" >&2; exit 1; }
@@ -124,8 +129,43 @@ jobs_file="$WORK/jobs.txt"
 for c in "${CONFIGS[@]}"; do
     for r in "${RUNS[@]}"; do echo "$c $r"; done
 done | sort -k7,7nr >"$jobs_file"
-echo "$(wc -l <"$jobs_file") runs, $JOBS in parallel; work in $WORK"
-xargs -P "$JOBS" -L 1 "$0" --one <"$jobs_file"
+if [[ -z "${MEM_BUDGET_MB:-}" ]]; then
+    MEM_BUDGET_MB=$(($(awk '/MemAvailable/ {print int($2 / 1024)}' /proc/meminfo) - 1536))
+fi
+echo "$(wc -l <"$jobs_file") runs, up to $JOBS in parallel, memory budget ${MEM_BUDGET_MB} MB; work in $WORK"
+
+# Memory-aware scheduler: start the first pending run (longest first) that fits both the job
+# limit and the memory budget; otherwise wait for a run to finish.
+mapfile -t pending <"$jobs_file"
+declare -A job_mem=()
+used=0 running=0 failures=0
+while ((${#pending[@]} > 0 || running > 0)); do
+    started=0
+    if ((running < JOBS)); then
+        for idx in "${!pending[@]}"; do
+            line="${pending[$idx]}"
+            need=$((MEM_BASE_MB + ${line##* } * MEM_PER_STEP_KB / 1024))
+            if ((used + need <= MEM_BUDGET_MB || running == 0)); then
+                # shellcheck disable=SC2086
+                "$0" --one $line &
+                job_mem[$!]=$need
+                used=$((used + need)) running=$((running + 1)) started=1
+                unset "pending[$idx]"
+                break
+            fi
+        done
+    fi
+    ((started)) && continue
+    finished=""
+    if ! wait -n -p finished; then
+        failures=$((failures + 1))
+    fi
+    if [[ -n "$finished" ]]; then
+        used=$((used - job_mem[$finished])) running=$((running - 1))
+        unset "job_mem[$finished]"
+    fi
+done
+((failures == 0)) || echo "$failures run(s) failed; rerun the script to retry them" >&2
 
 # ---- collect ----
 samples="$OUT/md_samples.csv"

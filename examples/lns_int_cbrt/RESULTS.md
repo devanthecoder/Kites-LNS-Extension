@@ -259,6 +259,259 @@ guesses. Swept: `div` ∈ {6, 20, 40, 68}, LNS convert ∈ {1, 3, 6}, `lpow` ∈
   27, 63, 64, 2^21, 2^22 − 1, 2^22, 2^22 + 1, 2^32 − 1, 2^32, 2642245³ − 1, 2642245³,
   2642245³ + 1, 2^63, 2^64 − 1). All pass, built on Linux with the `test_main.cpp` guard
   described in NOTES.md.
+- Configuration sweep (section H): **871** simulator runs over **133,788** roots (k = 2..6 ×
+  5 representations × 13 input sets × table sizes) and **540** independent log × exp runs, all
+  verified; C++ model **11,858** configurations × 200,000 inputs.
+
+## H. Configuration sweep: root degree, representation, input width, tables
+
+The sections above answer one question: k = 3 against the Linux kernel's tuned `cubic_root()`.
+This section tests whether that answer survives when the configuration changes, in the spirit
+of the `lns_lj` sweep. It is produced by `sweep_configs.py`; raw data in `config_sweep.csv`
+(simulator, committed) and `model_grid.csv` (C++ model, regenerated in about 2 minutes).
+
+**What was swept**
+
+| Axis | Values | Where |
+|---|---|---|
+| Root degree k (floor of a^(1/k), u64 input) | 2, 3, 4, 5, 6 (model also 7, 8) | simulator + model |
+| Representation | integer Newton (BK), FP64 Newton (FK), FP64 `fsqrt.d` (FS, k = 2 only), LNS `lpow` (LK), LNS log-divide (LDK) | simulator |
+| Input width | exactly w bits, w = 8, 16, 24, 32, 40, 48, 56, 64 (128 inputs each) | simulator (model: 16/32/48/64) |
+| Input distribution | small 0..255, uniform bit length, uniform u64 value, perfect powers ±1, top of the u64 range | simulator + model |
+| LNS tables | log bits × exp bits *independently*: simulator 6/8/10/11/13/23 × 6/8/10/11/13/22 for k = 3 (L0/L1/L2 in `results.csv`), diagonal for k = 2..6; model 11 × 11 pairs (6..16, 22/23) for every k | both |
+| Batch size | break-even from setup + per-root cost (linear, as checked by the batch programs) | simulator |
+
+**How it was checked.** 871 simulator runs (273 programs; LK/LDK at each table size) over
+**133,788 roots**, plus 540 independent-grid runs through `check.py --rows`. Every run passed:
+the output is the exact floor root, the output and fix-up candidate match the C++ model bit for
+bit, `instructions_retired` equals the static model, and the recorded fix-up/iteration
+histogram matches the model's. The model grid evaluates 11,858 configurations × 200,000
+inputs each; its instruction counts use the fix-up cost formula that the simulator sweep
+checked against every simulated root.
+
+Variants (all exact; each "fix-up" is the cube-root fix-up loop with x^3 replaced by x^k):
+BK = software `fls64`, seed 2^ceil(bits/k), integer Newton x' = ((k−1)x + a/x^(k−1))/k until
+it stops decreasing (generic: no tuned lookup seed). LK = `fcvt.lns.lu` → `lpow(x, 1/k)` →
+`fcvt.lu.lns` → fix-up. LDK = (log field + 1) / k by reciprocal multiply → fix-up. FK =
+FP64 bit-trick seed + 3 Newton steps → fix-up. FS = `fsqrt.d` → fix-up.
+
+**Findings, blunt**
+
+1. **k = 3 is not a cherry-pick, for k ≥ 3.** At k = 3..6, LNS needs 3.4 to 4.4× fewer
+   instructions per root than integer Newton and 1.5 to 2.2× fewer than FP64 Newton. That holds
+   on every input width and distribution and at every table size from 1 KiB up (k ≥ 4) or
+   from 2.5 KiB up (k = 3).
+2. **k = 2 is where LNS loses, and no table size fixes it.** On 64-bit inputs LK costs
+   **622** instructions per root (up to 575 fix-up steps), against **70** for integer Newton
+   and **15** for `fsqrt.d`. Even with 23/22-bit tables the worst case is still 531 steps.
+   The cause is the format, not the tables: Q9.22 keeps 22 fractional log bits, so a result
+   with more than about 22 significant bits cannot be resolved. The square root of a 64-bit
+   number has 32 bits. LK is fine up to 40-bit inputs, starts slipping at 48 (3 steps), and
+   collapses at 56 (31) and 64 (491). At k = 3 the root has at most 21.3 bits, which is why
+   the cube root just fits (+3 steps, the "1/3 quantisation" seen in section C).
+3. **Against `fsqrt.d`, LNS never wins at k = 2.** At best it ties (15.5 vs 15.5 instructions
+   for inputs up to 40 bits). If anyone asks "why not sqrt?", this is the answer: FP already
+   has a one-instruction square root, and LNS's one-instruction `lpow` only pays off when
+   no such instruction exists (k ≥ 3).
+4. **The exp table matters, the log table barely does.** At k = 3, exp = 6 bits costs 153 to
+   156 instructions per root *whatever the log size*, while log = 6 bits with exp ≥ 8 costs
+   about 21. Log 8 / exp 10 (10 KiB) gets L1 to 18.4 against 18.2 at the default 11/11
+   (32 KiB): **3.2× less table memory for 1% more instructions**. For k ≥ 4, 6/6 tables
+   (1 KiB) are already enough.
+5. **Half of every fix-up is wasted by rounding.** The LNS and FP candidates are exact only
+   about 50% of the time, because the converts round to nearest. The rest are one step too
+   high, so the fix-up almost always walks down once. A truncating `fcvt.lu.lns` would likely
+   remove most of that. This is a guess I have not built or measured.
+6. **LDK is only worth it for 64-bit cube roots.** It removes LK's +3 worst case at k = 3
+   (24.6 vs 32.9 on 64-bit inputs) but costs 6 to 7 more instructions everywhere else (the
+   memory round trip, because there is no L↔X move).
+7. **Break-even batch size is 1 for every k.** LNS setup is 1 to 3 instructions more than
+   integer setup, and that is repaid on the first root.
+8. **The integer baseline is generic, so the gap is an upper bound.** BK uses a power-of-two
+   seed. At k = 3 the kernel's tuned lookup-seeded version (B1, 62.3) is only 9% cheaper than
+   BK (68.5), so a tuned seed for other k would probably save 10 to 20%, not 3×. Also, every
+   instruction counts as 1 here, including `lpow`, `fsqrt.d`, `fdiv.d` and `divu`. Section F
+   shows how latency assumptions change that.
+
+#### H.A. Instructions per root by root degree (default 11/11 tables)
+
+Input set `uniform_bits`:
+
+| k | BK | FK | FS | LK | LDK | BK / best LNS | best FP / best LNS |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 2 | 59.7 | 27.5 | 15.5 | 35.2 | 41.2 | 1.70 | 0.44 |
+| 3 | 68.5 | 36.5 | - | 18.1 | 24.6 | 3.79 | 2.02 |
+| 4 | 67.3 | 41.5 | - | 19.5 | 25.5 | 3.45 | 2.13 |
+| 5 | 76.4 | 46.5 | - | 21.5 | 28.5 | 3.56 | 2.16 |
+| 6 | 81.4 | 51.5 | - | 23.5 | 30.5 | 3.47 | 2.19 |
+
+Input set `uniform_u64`:
+
+| k | BK | FK | FS | LK | LDK | BK / best LNS | best FP / best LNS |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 2 | 70.3 | 27.4 | 15.4 | 527.6 | 533.6 | 0.13 | 0.03 |
+| 3 | 85.1 | 36.5 | - | 29.1 | 24.5 | 3.48 | 1.49 |
+| 4 | 76.3 | 41.5 | - | 19.5 | 25.5 | 3.91 | 2.13 |
+| 5 | 93.3 | 46.5 | - | 21.5 | 28.5 | 4.34 | 2.16 |
+| 6 | 103.1 | 51.5 | - | 23.5 | 30.5 | 4.39 | 2.19 |
+
+#### H.B. Input bit width (default tables): instructions per root
+
+k = 2:
+
+| width | BK | FK | FS | LK | LDK | LK max steps | LDK max steps |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 8 | 46.7 | 27.5 | 15.5 | 15.5 | 21.5 | 1 | 1 |
+| 16 | 52.6 | 27.5 | 15.5 | 15.5 | 21.5 | 1 | 1 |
+| 24 | 56.2 | 27.5 | 15.5 | 15.5 | 21.5 | 1 | 1 |
+| 32 | 61.5 | 27.5 | 15.5 | 15.5 | 21.5 | 1 | 1 |
+| 40 | 60.8 | 27.5 | 15.5 | 15.5 | 21.5 | 1 | 1 |
+| 48 | 65.4 | 27.5 | 15.5 | 16.2 | 22.2 | 3 | 3 |
+| 56 | 66.7 | 27.5 | 15.5 | 50.9 | 56.9 | 31 | 31 |
+| 64 | 69.6 | 27.4 | 15.4 | 621.8 | 627.8 | 491 | 491 |
+
+k = 3:
+
+| width | BK | FK | LK | LDK | LK max steps | LDK max steps |
+|---|---:|---:|---:|---:|---:|---:|
+| 8 | 56.0 | 36.6 | 17.6 | 24.6 | 1 | 1 |
+| 16 | 70.6 | 36.5 | 17.5 | 24.5 | 1 | 1 |
+| 24 | 59.7 | 36.5 | 17.5 | 24.5 | 1 | 1 |
+| 32 | 74.0 | 36.5 | 17.5 | 24.5 | 1 | 1 |
+| 40 | 80.3 | 36.5 | 17.5 | 24.5 | 1 | 1 |
+| 48 | 70.2 | 36.4 | 17.4 | 24.4 | 1 | 1 |
+| 56 | 81.4 | 36.5 | 17.9 | 24.5 | 1 | 1 |
+| 64 | 92.1 | 36.5 | 32.9 | 24.6 | 3 | 1 |
+
+k = 6:
+
+| width | BK | FK | LK | LDK | LK max steps | LDK max steps |
+|---|---:|---:|---:|---:|---:|---:|
+| 8 | 68.0 | 51.9 | 23.9 | 30.9 | 1 | 1 |
+| 16 | 62.6 | 51.6 | 23.6 | 30.6 | 1 | 1 |
+| 24 | 59.7 | 51.3 | 23.3 | 30.3 | 1 | 1 |
+| 32 | 97.9 | 51.6 | 23.6 | 30.6 | 1 | 1 |
+| 40 | 84.6 | 51.6 | 23.6 | 30.6 | 1 | 1 |
+| 48 | 69.8 | 51.5 | 23.5 | 30.5 | 1 | 1 |
+| 56 | 110.3 | 51.4 | 23.4 | 30.4 | 1 | 1 |
+| 64 | 98.5 | 51.5 | 23.5 | 30.5 | 1 | 1 |
+
+#### H.C. Fix-up / Newton-iteration distribution, all sweep sets pooled (11/11)
+
+| k | variant | roots | candidate exact | mean abs steps | max abs steps | share with abs steps <= 1 |
+|---|---|---:|---:|---:|---:|---:|
+| 2 | BK (Newton iters) | 2010 | - | 2.74 | 6 | 18.1% |
+| 2 | FK | 2010 | 50.0% | 0.50 | 1 | 100.0% |
+| 2 | FS | 2010 | 50.0% | 0.50 | 1 | 100.0% |
+| 2 | LK | 2010 | 33.6% | 35.46 | 575 | 68.6% |
+| 2 | LDK | 2010 | 33.6% | 35.46 | 575 | 68.6% |
+| 3 | BK (Newton iters) | 2004 | - | 3.16 | 6 | 10.9% |
+| 3 | FK | 2004 | 51.6% | 0.48 | 1 | 100.0% |
+| 3 | LK | 2004 | 44.6% | 0.74 | 3 | 84.1% |
+| 3 | LDK | 2004 | 51.9% | 0.48 | 1 | 100.0% |
+| 4 | BK (Newton iters) | 1998 | - | 2.27 | 6 | 31.5% |
+| 4 | FK | 1998 | 47.7% | 0.52 | 1 | 100.0% |
+| 4 | LK | 1998 | 47.7% | 0.52 | 1 | 100.0% |
+| 4 | LDK | 1998 | 47.7% | 0.52 | 1 | 100.0% |
+| 5 | BK (Newton iters) | 1992 | - | 3.15 | 6 | 8.1% |
+| 5 | FK | 1992 | 46.4% | 0.54 | 1 | 100.0% |
+| 5 | LK | 1992 | 46.3% | 0.54 | 1 | 100.0% |
+| 5 | LDK | 1992 | 46.4% | 0.54 | 1 | 100.0% |
+| 6 | BK (Newton iters) | 1983 | - | 3.02 | 7 | 17.8% |
+| 6 | FK | 1983 | 58.5% | 0.42 | 1 | 100.0% |
+| 6 | LK | 1983 | 58.5% | 0.41 | 1 | 100.0% |
+| 6 | LDK | 1983 | 58.5% | 0.42 | 1 | 100.0% |
+
+#### H.D. LNS table size (simulator, set uniform_bits): instructions per root
+
+"(model)": k = 2 below 10 log bits was not simulated (up to 62,000 fix-up steps per root, hours per program); see H.F and `model_grid.csv`.
+
+| k | variant | 6/6 | 8/8 | 10/10 | 11/11 | 13/13 | 23/22 | BK |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 2 | LK | (model) | (model) | 34.0 | 35.2 | 34.1 | 34.0 | 59.7 |
+| 2 | LDK | (model) | (model) | 40.0 | 41.2 | 40.1 | 40.0 | 59.7 |
+| 3 | LK | 113.6 | 21.0 | 18.0 | 18.1 | 18.1 | 18.1 | 68.5 |
+| 3 | LDK | 27.7 | 24.5 | 24.5 | 24.6 | 24.5 | 24.5 | 68.5 |
+| 4 | LK | 19.5 | 19.5 | 19.5 | 19.5 | 19.5 | 19.5 | 67.3 |
+| 4 | LDK | 25.5 | 25.5 | 25.5 | 25.5 | 25.5 | 25.5 | 67.3 |
+| 5 | LK | 21.4 | 21.5 | 21.5 | 21.5 | 21.5 | 21.5 | 76.4 |
+| 5 | LDK | 28.5 | 28.5 | 28.5 | 28.5 | 28.5 | 28.5 | 76.4 |
+| 6 | LK | 23.5 | 23.5 | 23.5 | 23.5 | 23.5 | 23.5 | 81.4 |
+| 6 | LDK | 30.5 | 30.5 | 30.5 | 30.5 | 30.5 | 30.5 | 81.4 |
+
+#### H.E. Independent log x exp tables, k = 3 (simulator, results.csv, uniform_bits)
+
+L1 instructions per root (rows: log bits, columns: exp bits; B1 = 62.3):
+
+| log \ exp | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 22 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 6 | 153.2 |  | 20.7 |  | 21.8 | 21.9 |  | 21.9 | 21.9 |
+| 7 |  | 31.7 |  |  |  |  |  |  |  |
+| 8 | 155.3 |  | 22.7 |  | 18.4 | 18.4 |  | 18.5 | 18.4 |
+| 9 |  |  |  | 18.5 |  |  |  |  |  |
+| 10 | 155.5 |  | 22.8 |  | 18.2 | 18.2 |  | 18.3 | 18.2 |
+| 11 | 155.5 |  | 22.8 |  | 18.2 | 18.2 |  | 18.2 | 18.2 |
+| 12 |  |  |  |  |  |  | 18.2 |  |  |
+| 13 | 155.5 |  | 22.8 |  | 18.2 | 18.2 |  | 18.2 | 18.2 |
+| 23 | 155.5 |  | 22.8 |  | 18.2 | 18.2 |  | 18.2 | 18.2 |
+
+L2 instructions per root (rows: log bits, columns: exp bits; B1 = 62.3):
+
+| log \ exp | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 22 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 6 | 28.6 |  | 27.2 |  | 27.7 | 27.8 |  | 27.8 | 27.8 |
+| 7 |  | 25.2 |  |  |  |  |  |  |  |
+| 8 | 30.0 |  | 24.5 |  | 24.5 | 24.6 |  | 24.6 | 24.6 |
+| 9 |  |  |  | 24.5 |  |  |  |  |  |
+| 10 | 30.1 |  | 24.6 |  | 24.5 | 24.5 |  | 24.5 | 24.5 |
+| 11 | 30.1 |  | 24.6 |  | 24.5 | 24.5 |  | 24.5 | 24.5 |
+| 12 |  |  |  |  |  |  | 24.5 |  |  |
+| 13 | 30.1 |  | 24.6 |  | 24.5 | 24.5 |  | 24.5 | 24.5 |
+| 23 | 30.1 |  | 24.6 |  | 24.5 | 24.5 |  | 24.5 | 24.5 |
+
+#### H.F. C++ model grid: smallest tables that beat the integer baseline
+
+Per k and input set (200,000 model inputs per set; BK is the simulated cost on the same-named 128/256-input simulator set): the lowest modelled LK cost over all 121 table pairs, the smallest table pair (bytes) at which LK is cheaper than BK, and the worst fix-up even with the largest tables.
+
+| k | input set | BK (sim) | best LK (model) | at tables | smallest tables with LK < BK | max steps at 23/22 |
+|---|---|---:|---:|---|---|---:|
+| 2 | uniform_bits | 59.7 | 48.1 | 11/16 | 10/10 (16384 B) | 529 |
+| 2 | uniform_u64 | 70.3 | 493.5 | 11/16 | none | 532 |
+| 2 | width16 | 52.6 | 15.5 | 7/6 | 6/6 (1024 B) | 1 |
+| 2 | width32 | 61.5 | 15.4 | 11/7 | 6/6 (1024 B) | 1 |
+| 2 | width64 | 69.6 | 633.8 | 11/16 | none | 531 |
+| 3 | uniform_bits | 68.5 | 18.1 | 7/9 | 6/7 (1536 B) | 3 |
+| 3 | uniform_u64 | 85.1 | 27.7 | 7/9 | 6/8 (2560 B) | 3 |
+| 3 | width16 | 70.6 | 17.5 | 6/6 | 6/6 (1024 B) | 1 |
+| 3 | width32 | 74.0 | 17.3 | 8/6 | 6/6 (1024 B) | 1 |
+| 3 | width64 | 92.1 | 30.5 | 7/9 | 6/8 (2560 B) | 3 |
+| 4 | uniform_bits | 67.3 | 19.5 | 6/6 | 6/6 (1024 B) | 1 |
+| 4 | uniform_u64 | 76.3 | 19.4 | 11/7 | 6/6 (1024 B) | 1 |
+| 4 | width16 | 52.8 | 19.4 | 6/6 | 6/6 (1024 B) | 1 |
+| 4 | width32 | 60.9 | 19.5 | 7/6 | 6/6 (1024 B) | 1 |
+| 4 | width64 | 71.6 | 19.3 | 12/7 | 6/6 (1024 B) | 1 |
+| 5 | uniform_bits | 76.4 | 21.5 | 8/7 | 6/6 (1024 B) | 1 |
+| 5 | uniform_u64 | 93.3 | 21.4 | 8/7 | 6/6 (1024 B) | 1 |
+| 5 | width16 | 81.0 | 21.6 | 6/6 | 6/6 (1024 B) | 1 |
+| 5 | width32 | 90.9 | 21.5 | 6/6 | 6/6 (1024 B) | 1 |
+| 5 | width64 | 88.4 | 21.3 | 9/7 | 6/6 (1024 B) | 1 |
+| 6 | uniform_bits | 81.4 | 23.5 | 6/6 | 6/6 (1024 B) | 1 |
+| 6 | uniform_u64 | 103.1 | 23.3 | 8/6 | 6/6 (1024 B) | 1 |
+| 6 | width16 | 62.6 | 23.6 | 6/6 | 6/6 (1024 B) | 1 |
+| 6 | width32 | 97.9 | 23.5 | 6/6 | 6/6 (1024 B) | 1 |
+| 6 | width64 | 98.5 | 23.3 | 7/6 | 6/6 (1024 B) | 1 |
+
+#### H.G. Break-even batch size per k (default tables, set uniform_bits)
+
+Total = setup + N x per-root. Break-even N is the smallest batch at which LK's total is below BK's; 1 means LNS wins even for a single root.
+
+| k | BK setup | BK/root | LK setup | LK/root | break-even N |
+|---|---:|---:|---:|---:|---:|
+| 2 | 14 | 59.7 | 17 | 35.2 | 1 |
+| 3 | 14 | 68.5 | 16 | 18.1 | 1 |
+| 4 | 14 | 67.3 | 16 | 19.5 | 1 |
+| 5 | 14 | 76.4 | 16 | 21.5 | 1 |
+| 6 | 14 | 81.4 | 15 | 23.5 | 1 |
 
 ## What must not be claimed
 
@@ -270,6 +523,9 @@ guesses. Swept: `div` ∈ {6, 20, 40, 68}, LNS convert ∈ {1, 3, 6}, `lpow` ∈
   its error next to it. The exact comparison is **B1 (62.31) vs L1 (18.23)**.
 - B0 (approximate) does **not** beat L1 (exact) on instruction count on any set or batch size.
   If the tables are shrunk to 6 bits, L1 (153.17) loses to both B0 and B1.
+- **"LNS is better for integer roots" is false as a general claim.** It holds for k ≥ 3. For
+  square roots of inputs wider than about 44 bits it is 9× worse than integer Newton and 40×
+  worse than `fsqrt.d` (section H).
 
 ## Reproduce
 
@@ -282,4 +538,8 @@ KITES_CLI=build/kites-cli CBRT_MODEL=./lns_cbrt_accuracy python3 examples/lns_in
 KITES_CLI=build/kites-cli CBRT_MODEL=./lns_cbrt_accuracy examples/lns_int_cbrt/sweep.sh
 ./lns_cbrt_accuracy --sweep > examples/lns_int_cbrt/model_sweep.csv
 python3 tools/cbrt_cost_model.py
+# Section H (configuration sweep): about 25 min simulator + 2 min model on 4 cores
+KITES_CLI=build/kites-cli CBRT_MODEL=./lns_cbrt_accuracy python3 examples/lns_int_cbrt/sweep_configs.py sim
+CBRT_MODEL=./lns_cbrt_accuracy python3 examples/lns_int_cbrt/sweep_configs.py model
+python3 examples/lns_int_cbrt/sweep_configs.py summary
 ```

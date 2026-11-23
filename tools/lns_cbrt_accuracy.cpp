@@ -22,6 +22,11 @@
 //       prints the converter table bytes (log2(1+x) table + 2^f table) for one configuration.
 //   ./lns_cbrt_accuracy --sweep [per-set count, default 1000000]
 //       CSV on stdout: accuracy and fix-up steps for every input set x table config x variant.
+//   ./lns_cbrt_accuracy --keval <BK|LK|LDK|FK|FS> <k> <program.s> <fixed> <fixed for a=0>
+//       generic k-th root programs of examples/lns_int_cbrt/sweep_configs.py: per input
+//       "<output> <fix-up candidate (BK: Newton iterations)> <instructions (LK/LDK)>".
+//   ./lns_cbrt_accuracy --ksweep <per-set count> <fixed costs>
+//       CSV: k = 2..8 x log bits x exp bits x input set for LK/LDK (sweep_configs.py model).
 #include "lns_alu.h"
 #include "lns_conversion.h"
 #include "lns_pow.h"
@@ -454,6 +459,340 @@ void sweep(size_t n)
         std::fflush(stdout);
     }
 }
+// ---- generic k-th root (examples/lns_int_cbrt/sweep_configs.py) ------------------------------
+/// x^k in 128 bits, saturated at 2^65 (enough to compare against any u64).
+u128 powSat(u64 x, int k)
+{
+    u128 r = 1;
+    for (int i = 0; i < k; ++i)
+    {
+        r *= x;
+        if (r > (static_cast<u128>(1) << 65))
+        {
+            return static_cast<u128>(1) << 65;
+        }
+    }
+    return r;
+}
+
+/// floor(a^(1/k)), exact.
+u64 iroot(u64 a, int k)
+{
+    if (a < 2)
+    {
+        return a;
+    }
+    u64 x = static_cast<u64>(std::pow(static_cast<long double>(a), 1.0L / k));
+    while (x > 0 && powSat(x, k) > a)
+    {
+        --x;
+    }
+    while (powSat(x + 1, k) <= a)
+    {
+        ++x;
+    }
+    return x;
+}
+
+u64 capK(int k) { return iroot(UINT64_MAX, k); }
+
+/// The mul-based fix-up of the sweep programs (x^k instead of x^3).
+u64 fixupK(u64 a, u64 x, int k, u64 cap)
+{
+    if (x > cap)
+    {
+        x = cap;
+    }
+    while (powSat(x, k) > a)
+    {
+        --x;
+    }
+    while (x < cap && powSat(x + 1, k) <= a)
+    {
+        ++x;
+    }
+    return x;
+}
+
+/// Instructions of one fix-up (uninstrumented); same formula as sweep_configs.fixup_cost(),
+/// which sweep_configs.py checks against the block walk of every simulated input.
+u64 fixupCostK(int k, u64 cand, u64 fin, u64 cap)
+{
+    const u64 cl = cand > cap ? 1 : 0;
+    const u64 x = cand > cap ? cap : cand;
+    const u64 n = 1 + cl + k;
+    if (fin < x)
+    {
+        return n + (x - fin) * (k + 1);
+    }
+    return n + (fin - x) * (1 + (k + 1) + 2) + (fin == cap ? 1 : 1 + (k + 1));
+}
+
+/// fcvt.lu.d as KITES implements it (round to nearest, saturating).
+u64 fcvtLuD(double y)
+{
+    if (!std::isfinite(y) || y > static_cast<double>(UINT64_MAX) || y < 0.0)
+    {
+        return y < 0.0 ? 0 : UINT64_MAX;
+    }
+    return static_cast<u64>(std::nearbyint(y));
+}
+
+struct KRoot
+{
+    int k;
+    u64 cap;
+    const LnsConverter &conv;
+    LnsWord inv;  // 1/k in LNS: ldiv(fromInt32(1), fromInt32(k))
+    u64 fpR;      // seed: bits/k ~= mulhu(bits, fpR) >> fpS
+    int fpS;
+    u64 fpMagic;  // (k-1)/k * bits(1.0)
+    KRoot(int k_, const LnsConverter &c)
+        : k(k_), cap(capK(k_)), conv(c),
+          inv(defaultAlu().execute(LnsAluOp::DIV, c.fromInt32(1), c.fromInt32(k_))), fpR(0),
+          fpS(0), fpMagic(static_cast<u64>((static_cast<u128>(k_ - 1) * 0x3FF0000000000000ull) / k_))
+    {
+        for (int s = 0; s < 8; ++s)
+        {
+            const u128 num = static_cast<u128>(1) << (64 + s);
+            const u128 r = (num + k_ - 1) / k_;
+            if (r < (static_cast<u128>(1) << 64))
+            {
+                fpR = static_cast<u64>(r);
+                fpS = s;
+            }
+        }
+    }
+    /// BK: integer Newton from 2^ceil(bits/k); returns (root, iterations).
+    std::pair<u64, u64> bk(u64 a) const
+    {
+        if (a == 0)
+        {
+            return {0, 0};
+        }
+        const int bits = 64 - std::countl_zero(a);
+        u64 x = u64{1} << ((bits + k - 1) / k);
+        u64 it = 0;
+        for (;;)
+        {
+            u64 p = 1;
+            for (int i = 0; i < k - 1; ++i)
+            {
+                p *= x;
+            }
+            const u64 y = ((k - 1) * x + a / p) / k;
+            if (y >= x)
+            {
+                return {x, it};
+            }
+            x = y;
+            ++it;
+        }
+    }
+    u64 lk(u64 a) const { return conv.toUInt64(power(conv.fromUInt64(a), inv, conv)); }
+    u64 ldk(u64 a) const
+    {
+        LnsWord w = conv.fromUInt64(a);
+        if (a != 0)
+        {
+            w = static_cast<LnsWord>((static_cast<u64>(w) + 1) / k);
+        }
+        return conv.toUInt64(w);
+    }
+    u64 fk(u64 a) const
+    {
+        const double d = static_cast<double>(a);
+        const u64 bits = std::bit_cast<u64>(d);
+        const u64 g = static_cast<u64>((static_cast<u128>(bits) * fpR) >> 64) >> fpS;
+        double y = std::bit_cast<double>(g + fpMagic);
+        const double km1 = static_cast<double>(k - 1);
+        const double invk = 1.0 / k;
+        for (int i = 0; i < 3; ++i)
+        {
+            double q;
+            if (k == 2)
+            {
+                q = d / y;
+                q = q + y;
+            }
+            else
+            {
+                double p = y * y;
+                for (int j = 0; j < k - 3; ++j)
+                {
+                    p = p * y;
+                }
+                q = d / p;
+                const double t = y * km1;
+                q = q + t;
+            }
+            y = q * invk;
+        }
+        return fcvtLuD(y);
+    }
+    u64 fs(u64 a) const { return fcvtLuD(std::sqrt(static_cast<double>(a))); }
+    /// (output, fix-up candidate or Newton iterations for BK)
+    std::pair<u64, u64> eval(const std::string &v, u64 a) const
+    {
+        if (v == "BK")
+        {
+            return bk(a);
+        }
+        u64 c;
+        if (v == "LK")
+        {
+            c = lk(a);
+        }
+        else if (v == "LDK")
+        {
+            c = ldk(a);
+        }
+        else if (v == "FK")
+        {
+            c = fk(a);
+        }
+        else if (v == "FS")
+        {
+            c = fs(a);
+        }
+        else
+        {
+            throw std::runtime_error("unknown k-root variant " + v);
+        }
+        return {fixupK(a, c, k, cap), c};
+    }
+};
+
+std::map<std::string, std::vector<u64>> kSweepSets(size_t n)
+{
+    std::map<std::string, std::vector<u64>> s;
+    auto &small = s["small"];
+    for (u64 a = 0; a < n; ++a)
+    {
+        small.push_back(a);
+    }
+    Lcg r{0x5EEDC0DE};
+    auto &uni = s["uniform_bits"];
+    while (uni.size() < n)
+    {
+        const u32 bits = 1 + r.next32() % 64;
+        const u64 draw = r.next64();
+        const u64 low = bits == 1 ? 0 : (draw & ((u64{1} << (bits - 1)) - 1));
+        uni.push_back((u64{1} << (bits - 1)) | low);
+    }
+    Lcg q{0xFADE};
+    auto &u64v = s["uniform_u64"];
+    while (u64v.size() < n)
+    {
+        u64v.push_back(q.next64());
+    }
+    for (int w : {16, 32, 48, 64})
+    {
+        Lcg t{0x51DE00ull + static_cast<u64>(w)};
+        auto &v = s["width" + std::to_string(w)];
+        while (v.size() < n)
+        {
+            const u64 low = t.next64() & ((u64{1} << (w - 1)) - 1);
+            v.push_back((u64{1} << (w - 1)) | low);
+        }
+    }
+    return s;
+}
+
+/// costs: "LK2=9/9,LDK2=15/9,..." = per-root instructions outside the fix-up (a != 0 / a == 0).
+void kSweep(size_t n, const std::string &costs)
+{
+    std::map<std::string, std::pair<u64, u64>> fixed;
+    std::stringstream cs(costs);
+    std::string item;
+    while (std::getline(cs, item, ','))
+    {
+        const auto eq = item.find('='), sl = item.find('/');
+        fixed[item.substr(0, eq)] = {std::stoull(item.substr(eq + 1, sl - eq - 1)),
+                                     std::stoull(item.substr(sl + 1))};
+    }
+    const auto sets = kSweepSets(n);
+    std::printf("k,variant,input_set,n,log_bits,exp_bits,table_bytes,pct_exact,"
+                "candidate_pct_exact,candidate_max_abs_err,candidate_mean_rel_err,"
+                "steps_mean_abs,steps_max_abs,pct_steps_le1,instr_per_root_model,"
+                "steps_abs_buckets_0;1;2-3;4-15;16-255;256-65535;65536+\n");
+    const std::vector<int> logs = {6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 23};
+    const std::vector<int> exps = {6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 22};
+    std::map<std::pair<int, std::string>, std::vector<u64>> exact;
+    for (int k = 2; k <= 8; ++k)
+    {
+        for (const auto &[name, values] : sets)
+        {
+            auto &e = exact[{k, name}];
+            for (u64 a : values)
+            {
+                e.push_back(iroot(a, k));
+            }
+        }
+    }
+    for (int lb : logs)
+    {
+        for (int eb : exps)
+        {
+            const LnsConverter conv(lb, eb);
+            const size_t bytes = conv.logLutBytes() + conv.expLutBytes();
+            for (int k = 2; k <= 8; ++k)
+            {
+                const KRoot kr(k, conv);
+                for (const auto &[name, values] : sets)
+                {
+                    const auto &ex = exact[{k, name}];
+                    for (const char *v : {"LK", "LDK"})
+                    {
+                        const auto [fa, fz] = fixed.at(std::string(v) + std::to_string(k));
+                        size_t candExact = 0, le1 = 0, ok = 0;
+                        u64 maxAbs = 0, maxSteps = 0;
+                        long double sumRel = 0, sumSteps = 0, sumCost = 0;
+                        // |steps| buckets: 0, 1, 2-3, 4-15, 16-255, 256-65535, >= 65536
+                        std::array<size_t, 7> hist{};
+                        for (size_t i = 0; i < values.size(); ++i)
+                        {
+                            const u64 a = values[i];
+                            const u64 c = std::string(v) == "LK" ? kr.lk(a) : kr.ldk(a);
+                            const u64 f = ex[i]; // == fixupK(a, c, k, cap) for every c
+
+                            ok += f == ex[i];
+                            candExact += c == ex[i];
+                            const u64 d = c > ex[i] ? c - ex[i] : ex[i] - c;
+                            maxAbs = std::max(maxAbs, d);
+                            if (ex[i] > 0)
+                            {
+                                sumRel += static_cast<long double>(d) / ex[i];
+                            }
+                            const int64_t st = static_cast<int64_t>(f - c);
+                            const u64 ast = static_cast<u64>(std::llabs(st));
+                            maxSteps = std::max(maxSteps, ast);
+                            sumSteps += ast;
+                            le1 += ast <= 1;
+                            ++hist[ast == 0 ? 0 : ast == 1 ? 1 : ast < 4 ? 2 : ast < 16 ? 3
+                                   : ast < 256 ? 4 : ast < 65536 ? 5 : 6];
+                            sumCost += (a == 0 ? fz : fa) + fixupCostK(k, c, f, kr.cap);
+                        }
+                        std::string h;
+                        for (size_t b = 0; b < hist.size(); ++b)
+                        {
+                            h += (b ? ";" : "") + std::to_string(hist[b]);
+                        }
+                        const long double nn = static_cast<long double>(values.size());
+                        std::printf("%d,%s,%s,%zu,%d,%d,%zu,%.4Lf,%.4Lf,%llu,%.4Le,%.4Lf,%llu,"
+                                    "%.4Lf,%.3Lf,%s\n",
+                                    k, v, name.c_str(), values.size(), lb, eb, bytes,
+                                    100.0L * ok / nn, 100.0L * candExact / nn,
+                                    static_cast<unsigned long long>(maxAbs), sumRel / nn,
+                                    sumSteps / nn, static_cast<unsigned long long>(maxSteps),
+                                    100.0L * le1 / nn, sumCost / nn, h.c_str());
+                    }
+                }
+            }
+            std::fflush(stdout);
+        }
+    }
+}
 } // namespace
 
 int main(int argc, char **argv)
@@ -478,13 +817,38 @@ int main(int argc, char **argv)
             }
             return 0;
         }
+        if (mode == "--keval" && argc == 7)
+        {
+            // one line per input: "<output> <candidate | BK iterations> <model instructions>"
+            const int k = std::stoi(argv[3]);
+            const KRoot kr(k, defaultConverter());
+            const std::string v = argv[2];
+            const u64 fa = std::stoull(argv[5]), fz = std::stoull(argv[6]);
+            for (u64 a : readInputs(argv[4]))
+            {
+                const auto [out, cand] = kr.eval(v, a);
+                const u64 cost = (v == "LK" || v == "LDK")
+                                     ? (a == 0 ? fz : fa) + fixupCostK(k, cand, out, kr.cap)
+                                     : 0;
+                std::printf("%llu %llu %llu\n", static_cast<unsigned long long>(out),
+                            static_cast<unsigned long long>(cand),
+                            static_cast<unsigned long long>(cost));
+            }
+            return 0;
+        }
+        if (mode == "--ksweep" && argc == 4)
+        {
+            kSweep(std::stoull(argv[2]), argv[3]);
+            return 0;
+        }
         if (mode == "--sweep")
         {
             sweep(argc > 2 ? std::stoull(argv[2]) : 1000000);
             return 0;
         }
         std::fprintf(stderr, "usage: %s --eval <variant> <program.s> | --size <log> <exp> | "
-                             "--sweep [n]\n",
+                             "--sweep [n] | --keval <BK|LK|LDK|FK|FS> <k> <program.s> <fixed> <fixed a=0> | "
+                             "--ksweep <n> <fixed costs>\n",
                      argv[0]);
         return 2;
     }

@@ -42,6 +42,12 @@
   `reference.json` replace Codex's versions, and the `cbrt_*_small.s` programs are regenerated.
   The tools keep their names (`tools/lns_cbrt_accuracy.cpp`, `tools/cbrt_cost_model.py`,
   `tools/cbrt_cost_latencies.json`, `test/lns_cbrt_kernel_test.cpp`).
+- The configuration sweep (RESULTS.md section H) is one extra script, `sweep_configs.py`, and
+  one committed result file, `config_sweep.csv`. Its programs go to `configs/` and its model
+  grid to `model_grid.csv`; both are generated and gitignored. It adds `--keval` and
+  `--ksweep` modes to `tools/lns_cbrt_accuracy.cpp` and nothing else. The k = 3 programs
+  and checks above are unchanged, and `sweep.sh` gained the independent log × exp grid
+  (`GRID_LOG` / `GRID_EXP`).
 
 ## Deviations from the brief, and why
 

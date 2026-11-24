@@ -19,8 +19,9 @@ of that latency with the access time CACTI estimates for each size:
     an assumed 5 ns ROM access, so the read is 5/28 of the add and the rest (comparator, adders)
     stays fixed:
         cycles(size) = paper cycles x (1 - f + f x access(size) / access(2048)),  f = 5/28
-The conversion tables are sized the same way (2^k entries, two tables) and their access times
-are reported, but not turned into cycles: the paper has no conversion latency to anchor to.
+The conversion tables are sized the same way (2^k entries; one log table and one 2^f table) and
+scaled the same way, from an ASSUMED 4 cycles at the default 11 bits (the paper has no
+conversion latency): conversion cycles(k) = 4 x (1 - f + f x access(k) / access(11 bits)).
 
 Writes results/md_table_latency.csv. Needs a built CACTI: CACTI=/path/to/cacti (default
 ~/cacti/cacti; build with `git clone https://github.com/HewlettPackard/cacti && make`).
@@ -41,6 +42,7 @@ ENTRY_BYTES = 8
 ANCHOR_ENTRIES = 2048  # the paper's table size (Coleman & Chester 1999), see above
 ROM_FRACTION = 5.0 / 28.0  # Parhami 2020, section 4.2: 5 ns ROM access in a 28 ns add
 PAPER_ADD, PAPER_SUB = 3.0, 3.5
+CONV_CYCLES, CONV_ANCHOR_BITS = 4.0, 11  # assumed, as in the cycle estimate
 ALU_ENTRIES = [256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536]
 CONV_BITS = [6, 7, 8, 9, 10, 11, 12, 13]
 
@@ -97,24 +99,27 @@ def main():
         scale = 1 - ROM_FRACTION + ROM_FRACTION * access / base
         rows.append(["addsub", n, n * ENTRY_BYTES, "%.4f" % access, "%.4f" % area,
                      "%.3f" % (access / base), "%.3f" % (PAPER_ADD * scale),
-                     "%.3f" % (PAPER_SUB * scale)])
+                     "%.3f" % (PAPER_SUB * scale), ""])
     conv = {k: cacti(2 ** k * ENTRY_BYTES) for k in CONV_BITS}
-    conv_base = conv[11][0]
+    conv_base = conv[CONV_ANCHOR_BITS][0]
     for k in CONV_BITS:
         access, area = conv[k]
+        scale = 1 - ROM_FRACTION + ROM_FRACTION * access / conv_base
         rows.append(["conversion", 2 ** k, 2 * 2 ** k * ENTRY_BYTES, "%.4f" % access,
-                     "%.4f" % (2 * area), "%.3f" % (access / conv_base), "", ""])
+                     "%.4f" % (2 * area), "%.3f" % (access / conv_base), "", "",
+                     "%.3f" % (CONV_CYCLES * scale)])
     os.makedirs(RES, exist_ok=True)
     path = os.path.join(RES, "md_table_latency.csv")
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["table", "entries", "bytes", "access_ns", "area_mm2", "access_vs_default",
-                    "ladd_cycles", "lsub_cycles"])
+                    "ladd_cycles", "lsub_cycles", "conversion_cycles"])
         w.writerows(rows)
     print("wrote results/md_table_latency.csv")
     for r in rows:
-        print("  %-10s %6d entries %8d B  access %s ns (%sx)  area %s mm2  ladd %s lsub %s" %
-              (r[0], r[1], r[2], r[3], r[5], r[4], r[6] or "-", r[7] or "-"))
+        print("  %-10s %6d entries %8d B  access %s ns (%sx)  area %s mm2  cycles %s" %
+              (r[0], r[1], r[2], r[3], r[5], r[4],
+               r[8] if r[0] == "conversion" else "ladd %s lsub %s" % (r[6], r[7])))
     return 0
 
 

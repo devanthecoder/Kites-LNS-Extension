@@ -493,6 +493,35 @@ def table_tradeoff(counts, runs):
     save(fig, "md_table_tradeoff.pdf")
 
 
+def conversion_tradeoff(counts, runs):
+    """Estimated speed-up and accuracy per conversion table size (CACTI-scaled conversion cycles)."""
+    conv = {int(r["entries"]).bit_length() - 1: float(r["conversion_cycles"])
+            for r in read("md_table_latency.csv") if r["table"] == "conversion"}
+    fp = sum(n * latency(m, 0) for m, n in counts["fp32"].items())
+    rows = []
+    for name, cfg_counts in (("table", "lns_alu4096"), ("cordic", "cordic_conv11")):
+        lns = counts[cfg_counts]
+        for k in sorted(conv):
+            config = ("lns_alu4096" if k == 11 else "lns_conv%d" % k) if name == "table" \
+                else "cordic_conv%d" % k
+            cordic = 106 if name == "cordic" else 0
+            total = sum(n * (conv[k] if m.startswith("fcvt") else latency(m, cordic))
+                        for m, n in lns.items())
+            r = run(runs, config, "0.005", "200")
+            rows.append([name, k, "%.3f" % conv[k], round(total), "%.4f" % (fp / total),
+                         r["max_energy_err"], r["final_pos_dev"]])
+    with open(os.path.join(RES, "md_conversion_tradeoff.csv"), "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["addsub", "conversion_bits", "conversion_cycles", "lns_cycles",
+                    "speedup_vs_fp32", "max_energy_err", "final_pos_dev"])
+        w.writerows(rows)
+    print("wrote results/md_conversion_tradeoff.csv")
+    for r in rows:
+        if r[0] == "table":
+            print("  table add/sub, conversion %2d bits: %s cycles each, %sx FP32, energy error %s" %
+                  (r[1], r[2], r[4], r[5]))
+
+
 def plot_software_time():
     path = os.path.join(RES, "md_software_time.csv")
     if not os.path.exists(path):
@@ -544,6 +573,7 @@ def main():
     write_divide_sensitivity(counts)
     plot_averages(write_averages(samples))
     table_tradeoff(counts, runs)
+    conversion_tradeoff(counts, runs)
     plot_software_time()
     return 0
 

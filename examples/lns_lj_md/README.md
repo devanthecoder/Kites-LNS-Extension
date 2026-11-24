@@ -38,7 +38,7 @@ computed in C++ (`tools/lns_lj_md_model.cpp`), from the same inputs, with the ex
 | `time_md.sh` | Measures the software run time of the whole simulation on the host |
 | `plot_md.py` | Computes the cycle estimate and draws the plots |
 | `table_latency.py` | Estimates the add/sub latency at each table size with CACTI |
-| `results/` | `md_runs.csv` (one row per run), `md_samples.csv` (every logged sample), `md_counts.csv` (instruction counts), `md_cycles.csv` (cycle estimate), `md_cycles_divide.csv` (estimate for other `fdiv.s` latencies), `md_averages.csv` (run averages), `md_table_latency.csv` (CACTI table access times), `md_table_tradeoff.csv` (speed-up and accuracy per table size), `md_software_time.csv` (software run time), `plots/` (PDF figures) |
+| `results/` | `md_runs.csv` (one row per run), `md_samples.csv` (every logged sample), `md_counts.csv` (instruction counts), `md_cycles.csv` (cycle estimate), `md_cycles_divide.csv` (estimate for other `fdiv.s` latencies), `md_averages.csv` (run averages), `md_table_latency.csv` (CACTI table access times), `md_table_tradeoff.csv` (speed-up and accuracy per add/sub table size), `md_conversion_tradeoff.csv` (the same per conversion table size), `md_software_time.csv` (software run time), `plots/` (PDF figures) |
 
 ## Measures (all against FP64)
 
@@ -134,7 +134,10 @@ both for dt = 0.005 and 200 steps:
   its addition tables hold 1,536 interpolation intervals plus correction tables, about 13 KB,
   between our 1024- (8 KB) and 2048-entry (16 KB) tables. `plot_md.py` uses the scaled cycles of
   the default table in the cycle estimate, and combines every size with its accuracy into
-  `md_table_tradeoff.csv`.
+  `md_table_tradeoff.csv`. The conversion tables are scaled the same way from an assumed 4 cycles
+  at 11 bits (the paper has no conversion latency): 3.7 cycles at 6 bits to 4.4 at 13 bits. With
+  only 168 conversions per run, the speed-up stays 1.81x at every conversion size
+  (`md_conversion_tradeoff.csv`).
 - **Measured software time (host):** `time_md.sh` times the C++ model running the whole simulation
   many times on one CPU core and reports the median. FP runs on the host's FP hardware and LNS
   on the simulator's C++ arithmetic, so this is the cost of LNS done in software.

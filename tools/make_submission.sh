@@ -12,6 +12,8 @@
 # Environment:
 #   REPORT      the report PDF, copied into report/ (without it the zip has no report: test only)
 #   DEMO        a screen recording of the simulator, copied into report/demo.<ext> (optional)
+#   DRIVE_LINK  Google Drive link to the full zip / demo video; written to DRIVE_LINK.txt
+#   LITE=1      for a size limit: also leave out a regenerable table image
 #   OUT         output zip (default: <repo>/../CO24BTECH11006_ES24BTECH11030_KITES_LNS.zip)
 set -euo pipefail
 
@@ -28,6 +30,8 @@ EXCLUDE=(
     docs/Coleman1999_32bit_LNS_unit_ARITH14.pdf
     tools/submission_README.md
 )
+
+[[ "${LITE:-0}" == 1 ]] && EXCLUDE+=(examples/lns_int_cbrt/plots/latency_assumptions_table.png)
 
 REPO="$(git rev-parse --show-toplevel)"
 REF="${1:-HEAD}"
@@ -51,6 +55,13 @@ git -C "$REPO" archive --format=tar "$COMMIT" -- "${PATHSPEC[@]}" | tar -x -C "$
 
 # README.md
 git -C "$REPO" show "$COMMIT:tools/submission_README.md" | sed "s/@COMMIT@/$SHORT/g" > "$ROOT/README.md"
+if [[ -z "${DEMO:-}" && -n "${DRIVE_LINK:-}" ]]; then
+    sed -i 's/ and `demo.mp4`, a screen recording of the simulator running LNS code/; the demo video (a screen recording of the simulator running LNS code) is on Google Drive, see `DRIVE_LINK.txt`/' "$ROOT/README.md"
+fi
+if [[ -n "${DRIVE_LINK:-}" ]]; then
+    printf '%s\n' "Full submission, including the demo video (demo.mp4), on Google Drive:" "$DRIVE_LINK" \
+        "" "This zip has everything else: the report PDF, source code, tests, scripts and README." > "$ROOT/DRIVE_LINK.txt"
+fi
 
 # LNS_CHANGES.md
 {

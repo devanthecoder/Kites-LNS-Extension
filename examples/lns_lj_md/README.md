@@ -115,7 +115,7 @@ both for dt = 0.005 and 200 steps:
   | `fadd.s`, `fsub.s`, `fmul.s` | 4 | Table 3 (TMS320C6711) |
   | `fdiv.s` | 30 | Table 3 (TMS320C6711) |
   | `lmul` | 1 | Table 3 (ELM) |
-  | `ladd` / `lsub` | 3.13 / 3.66 | Table 3 (ELM): 3 / 3.5 (subtraction is 4 cycles when the range shifter is used, taken as half of all subtractions, section 4.2). Those belong to a table of about 2048 entries; our 4096-entry default is scaled with CACTI (below). |
+  | `ladd` / `lsub` | 3.13 / 3.66 | Table 3 (ELM): 3 / 3.5 (subtraction is 4 cycles when the range shifter is used, taken as half of all subtractions, section 4.2). Those belong to a table of about 2048 entries; the 4096-entry table used in the sweep and the estimate is scaled with CACTI (below). |
   | `lpown` | 4 | Table 1: 32-bit fixed-point multiply, 32 ns at the ELM's 8 ns cycle |
   | `laddc` / `lsubc` | 106 or 55 | Assumed: 2 CORDIC passes of 51 iterations at one per cycle, or passes sized for 22 fraction bits |
   | conversions | 4 | Assumed |
@@ -133,11 +133,14 @@ both for dt = 0.005 and 200 steps:
   (Coleman & Chester, ARITH-14, 1999, section 2.6, `docs/Coleman1999_32bit_LNS_unit_ARITH14.pdf`):
   its addition tables hold 1,536 interpolation intervals plus correction tables, about 13 KB,
   between our 1024- (8 KB) and 2048-entry (16 KB) tables. `plot_md.py` uses the scaled cycles of
-  the default table in the cycle estimate, and combines every size with its accuracy into
+  the 4096-entry table in the cycle estimate, and combines every size with its accuracy into
   `md_table_tradeoff.csv`. The conversion tables are scaled the same way from an assumed 4 cycles
   at 11 bits (the paper has no conversion latency): 3.7 cycles at 6 bits to 4.4 at 13 bits. With
   only 168 conversions per run, the speed-up stays 1.81x at every conversion size
   (`md_conversion_tradeoff.csv`).
+  Because of this trade-off (16K entries: 1.66x faster than FP32, energy error 3.3e-6, close to
+  FP32), the simulator's default add/sub table is now 16K entries. The sweep and the estimate
+  above were run with 4096 entries, the default at the time, and are labelled with that size.
 - **Measured software time (host):** `time_md.sh` times the C++ model running the whole simulation
   many times on one CPU core and reports the median. FP runs on the host's FP hardware and LNS
   on the simulator's C++ arithmetic, so this is the cost of LNS done in software.

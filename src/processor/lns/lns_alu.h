@@ -21,7 +21,7 @@
 
 /// Default number of requested samples in the add/sub correction table.
 #ifndef LNS_ALU_CORRECTION_SAMPLES
-#define LNS_ALU_CORRECTION_SAMPLES 4096
+#define LNS_ALU_CORRECTION_SAMPLES 16384
 #endif
 
 namespace Kites

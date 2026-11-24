@@ -88,7 +88,8 @@ Not included: FP64 conversions, rounding modes and FP flags for the conversions.
 
 - **Add / subtract.** `LnsAlu` (`src/processor/lns/lns_alu.*`) computes
   `Lmax + log2(1 +/- 2^-d)` with the correction read from a log-spaced table with linear
-  interpolation (errors of a few LSBs of the log; 4096 requested samples by default).
+  interpolation (errors of a few LSBs of the log; 16384 requested samples by default, chosen
+  from the molecular-dynamics study below; it was 4096 before).
   `laddc` / `lsubc` use `LnsCordicAddSub` (`lns_cordic_addsub.*`), which needs no table.
 - **Multiply / divide** add or subtract the logs and are exact.
 - **Conversions.** `LnsConverter` (`lns_conversion.*`) uses look-up tables of `2^k` entries
@@ -119,7 +120,7 @@ variables, read once on the first LNS instruction:
 | --- | --- | --- | --- |
 | `LNS_LOG_LUT_BITS` | 11 | 1-23 | converter, `log2(1+x)` |
 | `LNS_EXP_LUT_BITS` | 11 | 1-22 | converter, `2^f` (also used by `lpow`) |
-| `LNS_ALU_CORRECTION_SAMPLES` | 4096 | 2-2^24 | `ladd` / `lsub` correction |
+| `LNS_ALU_CORRECTION_SAMPLES` | 16384 | 2-2^24 | `ladd` / `lsub` correction |
 
 A malformed or out-of-range value makes the run fail with an error message; unset variables leave
 the defaults unchanged.
@@ -185,6 +186,8 @@ C++.
     (a memory model), anchored on the table size of the paper's unit (Coleman & Chester 1999,
     `docs/Coleman1999_32bit_LNS_unit_ARITH14.pdf`). A 16K-entry table is still 1.66x faster than
     FP32 with near-FP32 accuracy; 64K is 1.43x.
+  - Because of this trade-off the default add/sub table is now 16K entries (16384 samples).
+    The sweep results above keep the table size each run used (the 1.81x figure is at 4096).
 - See `examples/lns_lj_md/README.md` for the measures, the latency table and how to run it.
 
 ## Example

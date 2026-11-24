@@ -41,7 +41,7 @@ and time integration, see `../lns_lj_md`.
 | --- | --- |
 | FP32 | 5.3e-7 |
 | LNS, add/sub table 256 → 64K entries | 7.5e-3 → 8.5e-7 |
-| LNS, default (4096 entries, 11-bit conversion) | 2.7e-5 |
+| LNS, 4096 entries (the default when this was measured), 11-bit conversion | 2.7e-5 |
 | LNS, conversion table 6–23 bits (4096 add/sub) | 2.3e-5 – 3.0e-5 |
 | LNS CORDIC | 1.4e-7 |
 

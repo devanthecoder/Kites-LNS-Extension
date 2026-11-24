@@ -16,8 +16,8 @@ vm_state_dump.json, and asserts:
 Exit status is non-zero on any failure. A pass/fail table and test-vector counts are printed.
 
 Usage (from the repo root, after building kites-cli and the model):
-  python3 examples/lns_int_cbrt/gen_cbrt.py
-  KITES_CLI=build/kites-cli CBRT_MODEL=./lns_cbrt_accuracy python3 examples/lns_int_cbrt/check.py
+  python3 examples/lns_int_cbrt/scripts/gen_cbrt.py
+  KITES_CLI=build/kites-cli CBRT_MODEL=./lns_cbrt_accuracy python3 examples/lns_int_cbrt/scripts/check.py
   ... check.py --rows LOG EXP [--sets all] > rows.csv   (used by sweep.sh: CSV rows only)
 Environment: KITES_CLI, CBRT_MODEL, JOBS (parallel kites-cli runs, default = CPU count),
 WORK_ROOT (where temp run directories go; default /dev/shm if present: kites-cli opens and
@@ -37,8 +37,11 @@ import sys
 import tempfile
 from collections import Counter
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-REPO = os.path.dirname(os.path.dirname(HERE))
+HERE = os.path.dirname(os.path.abspath(__file__))          # scripts/
+ROOT = os.path.dirname(HERE)                                  # examples/lns_int_cbrt/
+PROG = os.path.join(ROOT, "programs")                         # .s programs, reference.json
+RESD = os.path.join(ROOT, "results")                          # CSV / JSON results
+REPO = os.path.dirname(os.path.dirname(ROOT))
 sys.path.insert(0, HERE)
 import gen_cbrt as g  # noqa: E402
 
@@ -108,7 +111,7 @@ def accuracy(values, outputs):
 class Job:
     def __init__(self, rel, prog, env_extra=None, tag=""):
         self.rel, self.prog, self.env, self.tag = rel, prog, env_extra or {}, tag
-        self.path = os.path.join(HERE, rel)
+        self.path = os.path.join(PROG, rel)
 
 
 def execute(job):
@@ -258,14 +261,14 @@ def write_mix(progs):
     mix = {}
     for rel, p in progs:
         if rel.startswith("batch/") and rel.endswith(f"_n{max(g.BATCH_SIZES)}.s"):
-            cands = [c for _o, c in model_eval(p.variant, os.path.join(HERE, rel))] \
+            cands = [c for _o, c in model_eval(p.variant, os.path.join(PROG, rel))] \
                 if needs_model(p) else None
             prof = p.static_profile(cands)
             per_root = {c: (prof["classes"].get(c, 0) - prof["classes_setup"].get(c, 0)) / p.n
                         for c in g.CLASSES}
             mix[p.variant] = {"program": rel, "n_roots": p.n, "setup": prof["classes_setup"],
                               "per_root": {c: v for c, v in per_root.items() if v}}
-    with open(os.path.join(HERE, "mix.json"), "w") as f:
+    with open(os.path.join(RESD, "mix.json"), "w") as f:
         json.dump({"note": "per-root dynamic instruction mix (excludes setup/exit), "
                            "uniform_bits, N=1024, no step counting; from the static model "
                            "that check.py validates against instructions_retired",
@@ -279,7 +282,7 @@ def check_mode():
             sys.exit(f"missing executable: {exe} (set KITES_CLI / CBRT_MODEL)")
     progs = g.all_programs()
     for rel, _p in progs:
-        if not os.path.exists(os.path.join(HERE, rel)):
+        if not os.path.exists(os.path.join(PROG, rel)):
             sys.exit(f"missing {rel}: run gen_cbrt.py first")
     jobs = [Job(rel, p) for rel, p in progs]
     alu_env = {"LNS_ALU_CORRECTION_SAMPLES": "2"}

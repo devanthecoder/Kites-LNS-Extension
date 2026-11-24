@@ -29,7 +29,7 @@ cache misses, no branch penalty). Two scenarios:
   A  cycles  - Table 3 latencies (ELM for LNS ops, TMS for FP ops), U74 for integer mul/div.
   B  ns      - Table 1 gate delays (fixed point for integer ops, FP column for FP ops, LNS
                column for LNS ops), Table 3 ns for memory.
-Usage: python3 examples/lns_int_cbrt/latency_model.py   (needs mix.json from check.py, and
+Usage: python3 examples/lns_int_cbrt/scripts/latency_model.py   (needs mix.json from check.py, and
 config_sweep.csv + the C++ model binary for the k = 2..6 variants; see RESULTS.md section I)
 """
 
@@ -40,7 +40,10 @@ import json
 import os
 import sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.abspath(__file__))          # scripts/
+ROOT = os.path.dirname(HERE)                                  # examples/lns_int_cbrt/
+PROG = os.path.join(ROOT, "programs")                         # .s programs, reference.json
+RESD = os.path.join(ROOT, "results")                          # CSV / JSON results
 sys.path.insert(0, HERE)
 
 # (value, source) per instruction class. Ranges are (low, mid, high).
@@ -106,7 +109,7 @@ def cost(mix, scen, level, override=None):
 
 
 def k3_mixes():
-    d = json.load(open(os.path.join(HERE, "mix.json")))["variants"]
+    d = json.load(open(os.path.join(RESD, "mix.json")))["variants"]
     return {v: d[v]["per_root"] for v in ("B0", "B1", "L0", "L1", "L2", "F0")}
 
 
@@ -118,7 +121,7 @@ def kroot_mixes(set_name="uniform_u64", tables=("11", "11")):
     for p in s.all_kprogs():
         if p.set_name != set_name:
             continue
-        path = os.path.join(HERE, p.rel)
+        path = os.path.join(PROG, p.rel)
         if not os.path.exists(path):
             s.write_programs([p])
         cands = None
@@ -167,7 +170,7 @@ def main():
     print()
     for set_name in ("uniform_u64", "width32"):
         kroot_block(set_name, rows, levels)
-    out = os.path.join(HERE, "latency_estimates.csv")
+    out = os.path.join(RESD, "latency_estimates.csv")
     with open(out, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0].keys()), lineterminator="\n")
         w.writeheader()

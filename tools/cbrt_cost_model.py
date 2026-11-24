@@ -5,7 +5,7 @@ KITES rvss retires one instruction per cycle, so the measured metric of this ben
 instruction count. Real hardware does not charge every instruction one cycle: divides are slow,
 multiplies take a few cycles, and an LNS convert or lpow would have some latency of its own that
 nobody has built yet. This script re-weights the measured dynamic instruction mix (mix.json,
-written by examples/lns_int_cbrt/check.py from the static model it validates against
+written by examples/lns_int_cbrt/scripts/check.py from the static model it validates against
 instructions_retired) with a per-class latency table and prints "cycles per root" for each
 variant, sweeping the classes whose latency is least known.
 
@@ -20,7 +20,7 @@ Every latency here is an ASSUMPTION. The defaults (tools/cbrt_cost_latencies.jso
 It is a serial latency sum: no pipelining, no overlap, no branch-miss penalty. Treat the output
 as a sensitivity analysis ("for which latencies does the conclusion flip?"), never as a speed.
 
-Usage: python3 tools/cbrt_cost_model.py [--mix examples/lns_int_cbrt/mix.json]
+Usage: python3 tools/cbrt_cost_model.py [--mix examples/lns_int_cbrt/results/mix.json]
                                         [--latencies tools/cbrt_cost_latencies.json]
 """
 
@@ -39,7 +39,7 @@ def cost(per_root, lat):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--mix", default=os.path.join(REPO, "examples", "lns_int_cbrt", "mix.json"))
+    ap.add_argument("--mix", default=os.path.join(REPO, "examples", "lns_int_cbrt", "results", "mix.json"))
     ap.add_argument("--latencies", default=os.path.join(HERE, "cbrt_cost_latencies.json"))
     args = ap.parse_args()
     mix = json.load(open(args.mix))["variants"]

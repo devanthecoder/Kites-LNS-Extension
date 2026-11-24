@@ -1,0 +1,7 @@
+variant,exact,instr_per_root,pct_exact,max_abs_err,source
+B1,True,62.3066,100.0,0,"results.csv (kites-cli, 1024 roots)"
+L1,True,18.2305,100.0,0,"results.csv (kites-cli, 1024 roots)"
+L2,True,24.5107,100.0,0,"results.csv (kites-cli, 1024 roots)"
+F0,True,36.5107,100.0,0,"results.csv (kites-cli, 1024 roots)"
+B0,False,46.332,45.4102,2005,"results.csv (kites-cli, 1024 roots)"
+L0,False,9.0,52.7344,3,"results.csv (kites-cli, 1024 roots)"

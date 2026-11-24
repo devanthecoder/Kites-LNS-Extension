@@ -8,7 +8,7 @@
 // Linux v6.12 cubic_root() (u32 wrap-around kept), and F0 mirrors the FP64 sequence of the
 // program (fmul.d, fdiv.d, fadd.d; KITES evaluates fcvt.lu.d with std::nearbyint).
 // At the default table sizes the outputs must equal the kites-cli output arrays bit for bit;
-// examples/lns_int_cbrt/check.py enforces that.
+// examples/lns_int_cbrt/scripts/check.py enforces that.
 //
 // Build (from the repo root, one command line):
 //   g++ -std=c++20 -O2 -I src/processor/lns tools/lns_cbrt_accuracy.cpp
@@ -23,7 +23,7 @@
 //   ./lns_cbrt_accuracy --sweep [per-set count, default 1000000]
 //       CSV on stdout: accuracy and fix-up steps for every input set x table config x variant.
 //   ./lns_cbrt_accuracy --keval <BK|LK|LDK|FK|FS> <k> <program.s> <fixed> <fixed for a=0>
-//       generic k-th root programs of examples/lns_int_cbrt/sweep_configs.py: per input
+//       generic k-th root programs of examples/lns_int_cbrt/scripts/sweep_configs.py: per input
 //       "<output> <fix-up candidate (BK: Newton iterations)> <instructions (LK/LDK)>".
 //   ./lns_cbrt_accuracy --ksweep <per-set count> <fixed costs>
 //       CSV: k = 2..8 x log bits x exp bits x input set for LK/LDK (sweep_configs.py model).
@@ -459,7 +459,7 @@ void sweep(size_t n)
         std::fflush(stdout);
     }
 }
-// ---- generic k-th root (examples/lns_int_cbrt/sweep_configs.py) ------------------------------
+// ---- generic k-th root (examples/lns_int_cbrt/scripts/sweep_configs.py) ------------------------------
 /// x^k in 128 bits, saturated at 2^65 (enough to compare against any u64).
 u128 powSat(u64 x, int k)
 {

@@ -35,6 +35,18 @@
 
 ## Folder layout
 
+- **Folder layout (2026-11-24 tidy-up).** The folder has four parts:
+
+  | Folder | Contents | In git? |
+  |---|---|---|
+  | top level | `RESULTS.md`, `NOTES.md`, `.gitignore` | yes |
+  | `scripts/` | `gen_cbrt.py`, `check.py`, `sweep.sh`, `sweep_configs.py`, `latency_model.py`, `make_plots.py` | yes |
+  | `programs/` | the generated `.s` programs and `reference.json`, plus `batch/`, `ablation/`, `configs/` | only the six `cbrt_*_uniform_bits.s` and `reference.json` |
+  | `results/` | `results.csv`, `config_sweep.csv`, `latency_estimates.csv` (committed); `mix.json`, `model_grid.csv`, `model_sweep.csv`, `check_output.txt` (generated) | committed ones only |
+  | `plots/` | slide-ready PNGs and, in `plots/data/`, the tidy CSV each one is drawn from | yes |
+
+  Every script finds the other folders relative to itself, so it can be run from anywhere.
+  The `program` column in the CSVs is relative to `programs/`.
 - Everything lives in `examples/lns_int_cbrt/` (the integer-application folder, next to
   `examples/lns_lj/`), as the team asked. Codex's partial commit `84fb209` put its files in
   `examples/lns_cbrt/`. So `git status` on the branch shows those 7 files as **deleted** there
@@ -43,8 +55,8 @@
   The tools keep their names (`tools/lns_cbrt_accuracy.cpp`, `tools/cbrt_cost_model.py`,
   `tools/cbrt_cost_latencies.json`, `test/lns_cbrt_kernel_test.cpp`).
 - The configuration sweep (RESULTS.md section H) is one extra script, `sweep_configs.py`, and
-  one committed result file, `config_sweep.csv`. Its programs go to `configs/` and its model
-  grid to `model_grid.csv`; both are generated and gitignored. It adds `--keval` and
+  one committed result file, `config_sweep.csv`. Its programs go to `programs/configs/` and its model
+  grid to `results/model_grid.csv`; both are generated and gitignored. It adds `--keval` and
   `--ksweep` modes to `tools/lns_cbrt_accuracy.cpp` and nothing else. The k = 3 programs
   and checks above are unchanged, and `sweep.sh` gained the independent log × exp grid
   (`GRID_LOG` / `GRID_EXP`).

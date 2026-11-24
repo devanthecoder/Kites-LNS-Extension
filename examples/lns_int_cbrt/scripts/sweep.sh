@@ -20,24 +20,25 @@
 #     at the default tables, for the break-even table.
 #
 # Usage (from anywhere):
-#   KITES_CLI=/path/to/kites-cli CBRT_MODEL=/path/to/lns_cbrt_accuracy examples/lns_int_cbrt/sweep.sh
+#   KITES_CLI=/path/to/kites-cli CBRT_MODEL=/path/to/lns_cbrt_accuracy examples/lns_int_cbrt/scripts/sweep.sh
 # Environment:
 #   KITES_CLI   kites-cli                       (default: <repo>/build/kites-cli)
 #   CBRT_MODEL  tools/lns_cbrt_accuracy binary  (default: <repo>/lns_cbrt_accuracy)
-#   OUT         results CSV                     (default: examples/lns_int_cbrt/results.csv)
+#   OUT         results CSV                     (default: examples/lns_int_cbrt/results/results.csv)
 #   JOBS        parallel kites-cli runs         (default: CPU count)
 #   BITS        converter sizes to sweep        (default: "6 7 8 9 10 11 12 13 14 15 16 23")
 #   GRID_LOG    log-table bits, independent grid (default: "6 8 10 11 13 23"; "" = no grid)
 #   GRID_EXP    exp-table bits, independent grid (default: "6 8 10 11 13 22")
 # The k-th-root / input-width / representation sweep is separate: sweep_configs.py.
-# The programs must be generated first: python3 examples/lns_int_cbrt/gen_cbrt.py
+# The programs must be generated first: python3 examples/lns_int_cbrt/scripts/gen_cbrt.py
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO="$(cd "$HERE/../.." && pwd)"
+ROOT="$(cd "$HERE/.." && pwd)"
+REPO="$(cd "$ROOT/../.." && pwd)"
 export KITES_CLI="${KITES_CLI:-$REPO/build/kites-cli}"
 export CBRT_MODEL="${CBRT_MODEL:-$REPO/lns_cbrt_accuracy}"
-OUT="${OUT:-$HERE/results.csv}"
+OUT="${OUT:-$ROOT/results/results.csv}"
 BITS="${BITS:-6 7 8 9 10 11 12 13 14 15 16 23}"
 GRID_LOG="${GRID_LOG-6 8 10 11 13 23}"
 GRID_EXP="${GRID_EXP-6 8 10 11 13 22}"
@@ -45,7 +46,7 @@ GRID_EXP="${GRID_EXP-6 8 10 11 13 22}"
 for f in "$KITES_CLI" "$CBRT_MODEL"; do
     [[ -x "$f" ]] || { echo "missing executable: $f" >&2; exit 1; }
 done
-[[ -f "$HERE/reference.json" ]] || { echo "missing $HERE/reference.json (run gen_cbrt.py)" >&2; exit 1; }
+[[ -f "$ROOT/programs/reference.json" ]] || { echo "missing $ROOT/programs/reference.json (run scripts/gen_cbrt.py)" >&2; exit 1; }
 
 CHECK=(python3 "$HERE/check.py")
 TMP="$(mktemp)"

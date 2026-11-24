@@ -753,17 +753,22 @@ Low / mid / high move all ranged entries together. `lpow` "mid" = an exp-table l
 cmake -B build -DCMAKE_BUILD_TYPE=Release . && cmake --build build --target kites_cli
 g++ -std=c++20 -O2 -I src/processor/lns tools/lns_cbrt_accuracy.cpp src/processor/lns/lns_alu.cpp \
     src/processor/lns/lns_conversion.cpp src/processor/lns/lns_pow.cpp -o lns_cbrt_accuracy
-python3 examples/lns_int_cbrt/gen_cbrt.py
-KITES_CLI=build/kites-cli CBRT_MODEL=./lns_cbrt_accuracy python3 examples/lns_int_cbrt/check.py
-KITES_CLI=build/kites-cli CBRT_MODEL=./lns_cbrt_accuracy examples/lns_int_cbrt/sweep.sh
-./lns_cbrt_accuracy --sweep > examples/lns_int_cbrt/model_sweep.csv
+python3 examples/lns_int_cbrt/scripts/gen_cbrt.py
+KITES_CLI=build/kites-cli CBRT_MODEL=./lns_cbrt_accuracy python3 examples/lns_int_cbrt/scripts/check.py
+KITES_CLI=build/kites-cli CBRT_MODEL=./lns_cbrt_accuracy examples/lns_int_cbrt/scripts/sweep.sh
+./lns_cbrt_accuracy --sweep > examples/lns_int_cbrt/results/model_sweep.csv
 python3 tools/cbrt_cost_model.py
 # Section H (configuration sweep): about 25 min simulator + 2 min model on 4 cores
-KITES_CLI=build/kites-cli CBRT_MODEL=./lns_cbrt_accuracy python3 examples/lns_int_cbrt/sweep_configs.py sim
-CBRT_MODEL=./lns_cbrt_accuracy python3 examples/lns_int_cbrt/sweep_configs.py model
-python3 examples/lns_int_cbrt/sweep_configs.py summary
+KITES_CLI=build/kites-cli CBRT_MODEL=./lns_cbrt_accuracy python3 examples/lns_int_cbrt/scripts/sweep_configs.py sim
+CBRT_MODEL=./lns_cbrt_accuracy python3 examples/lns_int_cbrt/scripts/sweep_configs.py model
+python3 examples/lns_int_cbrt/scripts/sweep_configs.py summary
 # Section I
-python3 examples/lns_int_cbrt/sweep_configs.py extra
+python3 examples/lns_int_cbrt/scripts/sweep_configs.py extra
 ./lns_cbrt_accuracy --yerr 3 6           # effective exponent and predicted worst fix-up
-CBRT_MODEL=./lns_cbrt_accuracy python3 examples/lns_int_cbrt/latency_model.py
+CBRT_MODEL=./lns_cbrt_accuracy python3 examples/lns_int_cbrt/scripts/latency_model.py
+# Plots and their CSVs (plots/, plots/data/); needs matplotlib
+CBRT_MODEL=./lns_cbrt_accuracy python3 examples/lns_int_cbrt/scripts/make_plots.py
 ```
+
+Folder layout: scripts in `scripts/`, programs in `programs/`, CSV/JSON results in `results/`,
+plots in `plots/` (see NOTES.md).

@@ -12,7 +12,7 @@
 #
 # Rows written to $OUT (header from check.py --header):
 #   * B0, B1, F0 on all input sets (they do not use the LNS tables);
-#   * L0, L1, L2 on all input sets for converter bits 6..13 and the 23/22 extreme
+#   * L0, L1, L2 on all input sets for converter bits 6..16 and the 23/22 extreme
 #     (LNS_LOG_LUT_BITS = LNS_EXP_LUT_BITS = k, the exp table capped at 22, as in lns_lj);
 #   * L0, L1, L2 on all input sets for every OFF-diagonal pair LOG x EXP from $GRID_LOG x
 #     $GRID_EXP (log table and exp table sized independently);
@@ -26,7 +26,7 @@
 #   CBRT_MODEL  tools/lns_cbrt_accuracy binary  (default: <repo>/lns_cbrt_accuracy)
 #   OUT         results CSV                     (default: examples/lns_int_cbrt/results.csv)
 #   JOBS        parallel kites-cli runs         (default: CPU count)
-#   BITS        converter sizes to sweep        (default: "6 7 8 9 10 11 12 13 23")
+#   BITS        converter sizes to sweep        (default: "6 7 8 9 10 11 12 13 14 15 16 23")
 #   GRID_LOG    log-table bits, independent grid (default: "6 8 10 11 13 23"; "" = no grid)
 #   GRID_EXP    exp-table bits, independent grid (default: "6 8 10 11 13 22")
 # The k-th-root / input-width / representation sweep is separate: sweep_configs.py.
@@ -38,7 +38,7 @@ REPO="$(cd "$HERE/../.." && pwd)"
 export KITES_CLI="${KITES_CLI:-$REPO/build/kites-cli}"
 export CBRT_MODEL="${CBRT_MODEL:-$REPO/lns_cbrt_accuracy}"
 OUT="${OUT:-$HERE/results.csv}"
-BITS="${BITS:-6 7 8 9 10 11 12 13 23}"
+BITS="${BITS:-6 7 8 9 10 11 12 13 14 15 16 23}"
 GRID_LOG="${GRID_LOG-6 8 10 11 13 23}"
 GRID_EXP="${GRID_EXP-6 8 10 11 13 22}"
 

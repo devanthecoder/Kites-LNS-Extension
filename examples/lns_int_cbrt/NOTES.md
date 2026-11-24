@@ -48,6 +48,9 @@
   `--ksweep` modes to `tools/lns_cbrt_accuracy.cpp` and nothing else. The k = 3 programs
   and checks above are unchanged, and `sweep.sh` gained the independent log × exp grid
   (`GRID_LOG` / `GRID_EXP`).
+- Section I (2026-11-24) adds `latency_model.py` (paper-based time estimate) and its output
+  `latency_estimates.csv`, the LKc variant and an `extra` mode in `sweep_configs.py`, and a
+  `--yerr` mode in `tools/lns_cbrt_accuracy.cpp`.
 
 ## Deviations from the brief, and why
 

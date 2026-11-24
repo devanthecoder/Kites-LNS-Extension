@@ -262,6 +262,11 @@ guesses. Swept: `div` ∈ {6, 20, 40, 68}, LNS convert ∈ {1, 3, 6}, `lpow` ∈
 - Configuration sweep (section H): **871** simulator runs over **133,788** roots (k = 2..6 ×
   5 representations × 13 input sets × table sizes) and **540** independent log × exp runs, all
   verified; C++ model **11,858** configurations × 200,000 inputs.
+- Section I (2026-11-24): **54** simulator runs at 14–16-bit converters, **108** add/sub-table
+  runs (6 sizes, identical results), **195** constant-exponent runs (`config_sweep.csv` now
+  holds 1,066 verified runs over 163,749 roots); C++ model grid widened to **21,168**
+  configurations (144 table pairs × k = 2..8 × 7 sets × 3 variants) × 200,000 inputs. All
+  passed.
 
 ## H. Configuration sweep: root degree, representation, input width, tables
 
@@ -513,6 +518,219 @@ Total = setup + N x per-root. Break-even N is the smallest batch at which LK's t
 | 5 | 14 | 76.4 | 16 | 21.5 | 1 |
 | 6 | 14 | 81.4 | 15 | 23.5 | 1 |
 
+## I. Converter sizing, exponent precision and a paper-based time estimate
+
+Added 2026-11-24. Four questions: (1) how big must the converter tables be, (2) does the size of
+the add/sub ALU table matter, (3) does the exponent ("power") given to `lpow` change anything,
+and (4) using the research paper's hardware numbers, roughly how long would integer, FP and LNS
+take? (1)–(3) are measured on the simulator and the C++ model; (4) is an **estimate**.
+
+### I.A Converter tables (`LNS_LOG_LUT_BITS` × `LNS_EXP_LUT_BITS`)
+
+New runs: simulator, k = 3, L0/L1/L2 on all six input sets at 14, 15 and 16 bits (54 runs, all
+verified, added to `results.csv`; `sweep.sh` now sweeps 6..16 by default). C++ model: every
+log × exp pair from 6..16 bits plus 23/22 (144 pairs) for k = 2..8, 7 input sets, 200,000
+inputs each (`model_grid.csv`, 21,168 rows).
+
+**Findings**
+
+1. **Past 10 bits, bigger tables buy nothing.** L1 at 10 bits (16 KiB) costs 18.19
+   instructions per root and at 16 bits (1 MiB) 18.24. The +3 worst fix-up stays from 10 bits
+   to 23/22 (96 MiB).
+2. **The exp table decides it, and now we know why.** `lpow(x, y)` gets the value of y from
+   the exp table (`exp2Frac` of the fraction of log y), then multiplies log x by it. With a
+   6-bit exp table the "1/3" it multiplies by is wrong by 1.4×10⁻⁵, whatever the log table.
+   That error alone predicts the fix-up length (table I.C).
+3. **For k ≥ 4 a 1 KiB converter (6/6) is within 1% of the best.** For k = 3 the best of all
+   144 pairs is **log 7 / exp 9 (5 KiB)**, slightly cheaper than 23/22. That is error
+   cancellation between the two tables on these inputs. Treat it as luck, not a design rule:
+   log 6 / exp 10 is 2.6× worse than log 6 / exp 9. The safe recommendation for k = 3 is
+   **log 8 / exp 10 (10 KiB)**, within 1% of 32 KiB on the simulator.
+4. **For k = 2, no converter size helps.** The best of 144 pairs still needs 494 instructions
+   per root on 64-bit inputs (section H).
+
+#### I.A.1 Smallest converter tables within 1% / 5% of the best cost (C++ model, LK)
+
+Over all 144 log x exp pairs (6..16 and 23 / 22 bits). Bytes = log table + exp table.
+
+| k | input set | best instr/root | at | smallest within 1% | smallest within 5% | default 11/11 (32 KiB) |
+|---|---|---:|---|---|---|---:|
+| 2 | uniform_u64 | 493.5 | 11/16 | 11/12 (48 KiB, 497.3) | 10/11 (24 KiB, 500.6) | 515.1 |
+| 2 | width32 | 15.4 | 11/7 | 6/6 (1 KiB, 15.4) | 6/6 (1 KiB, 15.4) | 15.5 |
+| 2 | width64 | 633.8 | 11/16 | 11/12 (48 KiB, 638.7) | 10/11 (24 KiB, 643.0) | 661.5 |
+| 3 | uniform_u64 | 27.7 | 7/9 | 7/9 (5 KiB, 27.7) | 7/9 (5 KiB, 27.7) | 29.2 |
+| 3 | width32 | 17.3 | 8/6 | 6/6 (1 KiB, 17.3) | 6/6 (1 KiB, 17.3) | 17.5 |
+| 3 | width64 | 30.5 | 7/9 | 7/9 (5 KiB, 30.5) | 7/9 (5 KiB, 30.5) | 32.5 |
+| 4 | uniform_u64 | 19.4 | 11/7 | 6/6 (1 KiB, 19.5) | 6/6 (1 KiB, 19.5) | 19.5 |
+| 4 | width32 | 19.5 | 7/6 | 6/6 (1 KiB, 19.5) | 6/6 (1 KiB, 19.5) | 19.5 |
+| 4 | width64 | 19.3 | 12/7 | 6/7 (1 KiB, 19.5) | 6/6 (1 KiB, 19.6) | 19.5 |
+| 5 | uniform_u64 | 21.4 | 8/7 | 6/7 (1 KiB, 21.4) | 6/7 (1 KiB, 21.4) | 21.5 |
+| 5 | width32 | 21.5 | 6/6 | 6/6 (1 KiB, 21.5) | 6/6 (1 KiB, 21.5) | 21.5 |
+| 5 | width64 | 21.3 | 9/7 | 6/7 (1 KiB, 21.3) | 6/7 (1 KiB, 21.3) | 21.5 |
+| 6 | uniform_u64 | 23.3 | 8/6 | 6/6 (1 KiB, 23.3) | 6/6 (1 KiB, 23.3) | 23.5 |
+| 6 | width32 | 23.5 | 6/6 | 6/6 (1 KiB, 23.5) | 6/6 (1 KiB, 23.5) | 23.5 |
+| 6 | width64 | 23.3 | 7/6 | 6/6 (1 KiB, 23.3) | 6/6 (1 KiB, 23.3) | 23.5 |
+| 7 | uniform_u64 | 25.4 | 8/6 | 6/6 (1 KiB, 25.4) | 6/6 (1 KiB, 25.4) | 25.5 |
+| 7 | width32 | 25.5 | 6/6 | 6/6 (1 KiB, 25.5) | 6/6 (1 KiB, 25.5) | 25.5 |
+| 7 | width64 | 25.4 | 6/6 | 6/6 (1 KiB, 25.4) | 6/6 (1 KiB, 25.4) | 25.4 |
+| 8 | uniform_u64 | 27.3 | 7/6 | 6/6 (1 KiB, 27.3) | 6/6 (1 KiB, 27.3) | 27.3 |
+| 8 | width32 | 27.4 | 6/6 | 6/6 (1 KiB, 27.4) | 6/6 (1 KiB, 27.4) | 27.4 |
+| 8 | width64 | 27.0 | 7/6 | 6/6 (1 KiB, 27.0) | 6/6 (1 KiB, 27.0) | 27.0 |
+
+#### I.A.2 Which table matters: k = 3, uniform_u64, LK instructions per root (C++ model)
+
+| log \ exp | 6 | 7 | 8 | 9 | 10 | 11 | 13 | 16 | 22 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 6 | 1718.6 | 184.5 | 64.4 | 35.8 | 74.4 | 74.8 | 75.1 | 75.1 | 75.0 |
+| 8 | 1743.0 | 209.0 | 88.8 | 32.5 | 31.6 | 32.0 | 32.3 | 32.3 | 32.1 |
+| 10 | 1744.6 | 210.5 | 90.4 | 34.0 | 28.9 | 29.3 | 29.6 | 29.6 | 29.5 |
+| 11 | 1744.6 | 210.6 | 90.4 | 34.1 | 28.8 | 29.2 | 29.4 | 29.4 | 29.3 |
+| 13 | 1744.7 | 210.6 | 90.5 | 34.1 | 28.8 | 29.2 | 29.4 | 29.4 | 29.3 |
+| 16 | 1744.7 | 210.6 | 90.5 | 34.1 | 28.8 | 29.1 | 29.4 | 29.4 | 29.3 |
+| 23 | 1744.7 | 210.6 | 90.5 | 34.1 | 28.8 | 29.1 | 29.4 | 29.4 | 29.3 |
+
+#### I.A.3 Simulator: converter bits 6..16 (k = 3, uniform_bits, log = exp bits)
+
+| bits | table bytes | L1 instr/root | L1 max steps | L2 instr/root | L2 max steps |
+|---:|---:|---:|---:|---:|---:|
+| 6 | 1,024 | 153.17 | 573 | 28.58 | 30 |
+| 7 | 2,048 | 31.71 | 65 | 25.19 | 8 |
+| 8 | 4,096 | 22.66 | 25 | 24.54 | 3 |
+| 9 | 8,192 | 18.48 | 7 | 24.50 | 1 |
+| 10 | 16,384 | 18.19 | 3 | 24.50 | 1 |
+| 11 | 32,768 | 18.23 | 3 | 24.51 | 1 |
+| 12 | 65,536 | 18.25 | 3 | 24.51 | 1 |
+| 13 | 131,072 | 18.24 | 3 | 24.51 | 1 |
+| 14 | 262,144 | 18.24 | 3 | 24.51 | 1 |
+| 15 | 524,288 | 18.24 | 3 | 24.51 | 1 |
+| 16 | 1,048,576 | 18.24 | 3 | 24.51 | 1 |
+| 23/22 | 100,663,296 | 18.23 | 3 | 24.51 | 1 |
+
+
+### I.B The add/sub ALU table (`LNS_ALU_CORRECTION_SAMPLES`)
+
+Simulator, k = 3, L0/L1/L2 on all six input sets with 2, 16, 256, 4,096 (default), 65,536 and
+16,777,216 (the maximum) samples: **all 108 runs give identical outputs and identical
+instruction counts.** The root kernel never adds or subtracts in LNS (`ldiv` in setup is an
+exact log subtraction). So the ALU table can be any size for this application; its cost
+belongs to Lennard-Jones, not here.
+
+### I.C The exponent ("power")
+
+Two experiments on the exponent 1/k given to `lpow`:
+
+- **How 1/k is built does not matter.** Variant LKc loads a correctly rounded constant
+  (round(−log2(k)·2²²)) instead of building 1/k with `fcvt.lns.w` ×2 + `ldiv`. For every k
+  from 2 to 8 the two words are bit-identical, so LKc equals LK everywhere: 195 more
+  simulator runs (k = 2..6, 13 input sets, tables 10/10, 11/11, 23/22, all verified, rows in
+  `config_sweep.csv`) and all 7,056 model configurations.
+- **The exponent's precision sets the fix-up length, and a one-line formula predicts it.**
+  `./lns_cbrt_accuracy --yerr k e` prints the effective exponent `lpow` actually uses with an
+  e-bit exp table. The worst fix-up is about cap_k × ln 2 × 64 × |y_eff − 1/k|. For k = 3:
+
+| exp bits | error of effective 1/3 (relative) | predicted worst fix-up | measured (model, all sets) |
+|---:|---:|---:|---:|
+| 6 | 1.44e-05 | 561 | 597 |
+| 7 | 1.53e-06 | 60 | 71 |
+| 8 | 6.13e-07 | 24 | 28 |
+| 9 | 1.56e-07 | 6 | 8 |
+| 10 | 7.32e-08 | 2.9 | 3 |
+| 11..22 | 7.3e-08 | 2.9 | 3 |
+
+  The floor of 7.3×10⁻⁸ is the Q9.22 rounding of log2(3), and it shows up as the +3. For
+  k = 2, 4 and 8 the exponent is exact (−1, −2, −3 in the log), so their fix-up comes from
+  the output precision (section H), not from the exponent. For k = 5, 6 and 7 the exponent
+  error times their small cap is below one step.
+- **The root degree k itself** is in section H. LNS wins for k ≥ 3 and loses for square
+  roots of inputs wider than about 44 bits.
+
+### I.D Estimated time from the paper (ESTIMATE, not a measurement)
+
+`latency_model.py` multiplies the measured per-root instruction mix by latencies from
+**B. Parhami, "Computing with logarithmic number system arithmetic", Computers and Electrical
+Engineering 87 (2020) 106800** (the team's research paper), and sums them serially. Every
+latency is tagged in the script and in its printed output with where it comes from. Raw
+numbers: `latency_estimates.csv`.
+
+| Instruction class | Scenario A: cycles | Source | Scenario B: ns | Source |
+|---|---:|---|---:|---|
+| LNS multiply/divide (`ldiv`) | 1 | paper Table 3 (ELM) | 4 | paper Table 1 |
+| LNS load / store | 1 / 2 | paper Table 3 (ELM) | 8 / 16 | paper Table 3 |
+| **int → LNS, LNS → int convert** | **1 / 2 / 4** | **ASSUMED (not in paper)** | **9 / 17 / 32** | **ASSUMED** |
+| **`lpow`** | **1 / 4 / 8** | **ASSUMED (not in paper)** | **4 / 37 / 64** | **ASSUMED** |
+| FP add, multiply | 4, 4 | paper Table 3 (TMS320C6711) | 28, 22 | paper Table 1 |
+| FP divide | 30 | paper Table 3 (TMS) | 44 / 55 / 66 | paper text: 2–3× multiply |
+| FP square root | 40 | paper Table 3 (TMS) | 59 / 73 / 88 | ASSUMED: 4/3 × divide |
+| FP convert / move | 4 / 1 | ASSUMED | 28 / 4 | ASSUMED |
+| integer multiply | 3 | SiFive U74 manual (not paper) | 32 | paper Table 1 |
+| integer divide | 6 / 20 / 68 | SiFive U74 manual | 64 / 80 / 96 | paper text: 2–3× multiply |
+| integer ALU, branch, load, store | 1 | ASSUMED (load: paper T3) | 4, 4, 8, 8 | Table 1 add / T3 load |
+
+Low / mid / high move all ranged entries together. `lpow` "mid" = an exp-table lookup plus a
+32×32 multiply, which is what KITES's `lpow` does.
+
+**k = 3, the TCP CUBIC variants (uniform_bits):**
+
+| variant | instructions | A: cycles low / mid / high | B: ns low / mid / high |
+|---|---:|---:|---:|
+| B0 kernel (approx) | 46.3 | 56 / 69 / 113 | 328 / 343 / 358 |
+| B1 integer exact | 62.3 | 89 / 116 / 208 | 620 / 651 / 681 |
+| L0 LNS (approx) | 9.0 | 9 / 14 / 22 | 54 / 103 / 160 |
+| **L1 LNS exact** | **18.2** | **27 / 32 / 40** | **208 / 257 / 314** |
+| L2 LNS log-divide | 24.5 | 36 / 38 / 42 | 280 / 296 / 326 |
+| F0 FP64 Newton | 36.5 | 176 / 176 / 176 | 714 / 747 / 780 |
+
+**Roots of degree k = 2..6 (scenario A cycles, mid):**
+
+| k | input | integer BK | FP64 FK | `fsqrt` FS | LNS LK | LNS LDK |
+|---|---|---:|---:|---:|---:|---:|
+| 2 | 32-bit | 133 | 145 | 65 | **25** | 29 |
+| 2 | 64-bit uniform | 163 | 144 | **64** | 859 | 863 |
+| 3 | 64-bit uniform | 210 | 176 | – | 48 | **38** |
+| 4 | 64-bit uniform | 188 | 194 | – | **37** | 41 |
+| 5 | 64-bit uniform | 233 | 212 | – | **43** | 50 |
+| 6 | 64-bit uniform | 275 | 230 | – | **49** | 56 |
+
+**What the estimate says, bluntly**
+
+1. **The instruction-count win survives, and grows against FP.** At mid latencies L1 is about
+   **3.7× faster than B1** (32 vs 116 cycles) and **5.6× faster than FP64** (176). By
+   instruction count FP was the runner-up; by time it is the slowest, because each of its 3
+   divides costs about 30 cycles on the paper's FP chip.
+2. **L1 stays ahead of the integer kernel until one `lpow` costs about 88 cycles**
+   (scenario A, everything else mid), and ahead of FP until about 148. Nothing in the paper
+   suggests an LNS operation anywhere near that slow (ELM's slowest is a 4-cycle subtract).
+   So the conclusion is robust to the one number nobody has measured.
+3. **Square roots flip for narrow inputs.** By instruction count LNS only tied `fsqrt.d`
+   (15.5 each). By time it wins for 32-bit inputs (25 vs 65 cycles), because the paper's FP
+   square root takes about 40 cycles. On 64-bit inputs it still loses by 13×.
+4. **The ns scenario (gate delays) agrees in direction:** L1 257 ns vs B1 651 ns vs F0 747 ns.
+
+**Where the paper does not match KITES (say these before anyone else does)**
+
+- **The paper has no converter or `lpow` latency.** It describes a converter (Kim et al.:
+  leading-zero counter, shifter, 3 carry-save levels, a 26-bit adder) but gives no timing.
+  Those are the two operations the LNS kernel depends on, so their values here are guesses,
+  swept over a range.
+- **Different LNS format.** ELM uses 8 integer + 23 fraction bits; KITES uses 9 + 22. One
+  more fraction bit would roughly halve the k = 3 and k = 2 fix-ups (inferred, not run). It
+  would not rescue k = 2 on 64-bit inputs (about 265 steps instead of 530).
+- **Different instruction set.** ELM has no integer↔LNS convert and no `lpow`. Its square
+  root is a shift of the log, i.e. our LDK for k = 2 in one instruction. KITES needs a
+  memory round trip for that because there is no L↔X register move.
+- **The paper's FP is 32-bit; our F0 is FP64.** FP64 on the same chip would be slower, so
+  the FP numbers here flatter F0.
+- **Two machines, two technologies.** Scenario A mixes ELM cycles (125 MHz) for LNS with TMS
+  cycles (150 MHz) for FP, as if one chip had both units. Scenario B uses 0.7 µm gate delays
+  (Table 1) with 0.18 µm memory times (Table 3).
+- **Serial sum, no pipelining.** The TMS is a pipelined VLIW, so independent roots could
+  overlap and FP throughput would look better than this latency sum. The paper itself notes
+  TMS wins on long vectors.
+- **Integer latencies are not from the paper** (SiFive U74 datasheet in scenario A).
+- **Power consumption cannot be modelled from the paper.** It only gives a qualitative
+  "factor of about 2" saving for LNS multiply/divide-type circuits and 50% less switching
+  activity. Nothing here estimates energy.
+
 ## What must not be claimed
 
 - **Simulator wall-clock time is not an LNS-vs-integer comparison.** KITES runs integer/FP ops
@@ -523,6 +741,8 @@ Total = setup + N x per-root. Break-even N is the smallest batch at which LK's t
   its error next to it. The exact comparison is **B1 (62.31) vs L1 (18.23)**.
 - B0 (approximate) does **not** beat L1 (exact) on instruction count on any set or batch size.
   If the tables are shrunk to 6 bits, L1 (153.17) loses to both B0 and B1.
+- **Section I.D is an estimate, not a time.** Two of its key inputs (convert and `lpow`
+  latency) are guesses; the deck should keep presenting instruction counts.
 - **"LNS is better for integer roots" is false as a general claim.** It holds for k ≥ 3. For
   square roots of inputs wider than about 44 bits it is 9× worse than integer Newton and 40×
   worse than `fsqrt.d` (section H).
@@ -542,4 +762,8 @@ python3 tools/cbrt_cost_model.py
 KITES_CLI=build/kites-cli CBRT_MODEL=./lns_cbrt_accuracy python3 examples/lns_int_cbrt/sweep_configs.py sim
 CBRT_MODEL=./lns_cbrt_accuracy python3 examples/lns_int_cbrt/sweep_configs.py model
 python3 examples/lns_int_cbrt/sweep_configs.py summary
+# Section I
+python3 examples/lns_int_cbrt/sweep_configs.py extra
+./lns_cbrt_accuracy --yerr 3 6           # effective exponent and predicted worst fix-up
+CBRT_MODEL=./lns_cbrt_accuracy python3 examples/lns_int_cbrt/latency_model.py
 ```

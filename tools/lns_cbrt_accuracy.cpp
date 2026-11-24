@@ -544,12 +544,16 @@ struct KRoot
     u64 cap;
     const LnsConverter &conv;
     LnsWord inv;  // 1/k in LNS: ldiv(fromInt32(1), fromInt32(k))
+    LnsWord invc; // 1/k with a correctly rounded log: round(-log2(k) * 2^22) (variant LKc)
     u64 fpR;      // seed: bits/k ~= mulhu(bits, fpR) >> fpS
     int fpS;
     u64 fpMagic;  // (k-1)/k * bits(1.0)
     KRoot(int k_, const LnsConverter &c)
         : k(k_), cap(capK(k_)), conv(c),
-          inv(defaultAlu().execute(LnsAluOp::DIV, c.fromInt32(1), c.fromInt32(k_))), fpR(0),
+          inv(defaultAlu().execute(LnsAluOp::DIV, c.fromInt32(1), c.fromInt32(k_))),
+          invc(pack(false, static_cast<int32_t>(
+                               -std::llround(std::log2(static_cast<long double>(k_)) * 4194304.0L)))),
+          fpR(0),
           fpS(0), fpMagic(static_cast<u64>((static_cast<u128>(k_ - 1) * 0x3FF0000000000000ull) / k_))
     {
         for (int s = 0; s < 8; ++s)
@@ -590,6 +594,7 @@ struct KRoot
         }
     }
     u64 lk(u64 a) const { return conv.toUInt64(power(conv.fromUInt64(a), inv, conv)); }
+    u64 lkc(u64 a) const { return conv.toUInt64(power(conv.fromUInt64(a), invc, conv)); }
     u64 ldk(u64 a) const
     {
         LnsWord w = conv.fromUInt64(a);
@@ -642,6 +647,10 @@ struct KRoot
         if (v == "LK")
         {
             c = lk(a);
+        }
+        else if (v == "LKc")
+        {
+            c = lkc(a);
         }
         else if (v == "LDK")
         {
@@ -716,8 +725,8 @@ void kSweep(size_t n, const std::string &costs)
                 "candidate_pct_exact,candidate_max_abs_err,candidate_mean_rel_err,"
                 "steps_mean_abs,steps_max_abs,pct_steps_le1,instr_per_root_model,"
                 "steps_abs_buckets_0;1;2-3;4-15;16-255;256-65535;65536+\n");
-    const std::vector<int> logs = {6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 23};
-    const std::vector<int> exps = {6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 22};
+    const std::vector<int> logs = {6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 23};
+    const std::vector<int> exps = {6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 22};
     std::map<std::pair<int, std::string>, std::vector<u64>> exact;
     for (int k = 2; k <= 8; ++k)
     {
@@ -742,7 +751,7 @@ void kSweep(size_t n, const std::string &costs)
                 for (const auto &[name, values] : sets)
                 {
                     const auto &ex = exact[{k, name}];
-                    for (const char *v : {"LK", "LDK"})
+                    for (const char *v : {"LK", "LKc", "LDK"})
                     {
                         const auto [fa, fz] = fixed.at(std::string(v) + std::to_string(k));
                         size_t candExact = 0, le1 = 0, ok = 0;
@@ -753,7 +762,8 @@ void kSweep(size_t n, const std::string &costs)
                         for (size_t i = 0; i < values.size(); ++i)
                         {
                             const u64 a = values[i];
-                            const u64 c = std::string(v) == "LK" ? kr.lk(a) : kr.ldk(a);
+                            const std::string vs(v);
+                            const u64 c = vs == "LK" ? kr.lk(a) : vs == "LKc" ? kr.lkc(a) : kr.ldk(a);
                             const u64 f = ex[i]; // == fixupK(a, c, k, cap) for every c
 
                             ok += f == ex[i];
@@ -827,12 +837,35 @@ int main(int argc, char **argv)
             for (u64 a : readInputs(argv[4]))
             {
                 const auto [out, cand] = kr.eval(v, a);
-                const u64 cost = (v == "LK" || v == "LDK")
+                const u64 cost = (v == "LK" || v == "LKc" || v == "LDK")
                                      ? (a == 0 ? fz : fa) + fixupCostK(k, cand, out, kr.cap)
                                      : 0;
                 std::printf("%llu %llu %llu\n", static_cast<unsigned long long>(out),
                             static_cast<unsigned long long>(cand),
                             static_cast<unsigned long long>(cost));
+            }
+            return 0;
+        }
+        if (mode == "--yerr" && argc == 4)
+        {
+            // effective exponent of lpow(x, 1/k): y_eff = exp2Frac(frac(L_y)) * 2^(I - 31), for
+            // the ldiv-built 1/k (LK) and the correctly rounded constant (LKc), and the
+            // predicted worst fix-up: cap * ln2 * 64 * |y_eff - 1/k| (+1 for output rounding)
+            const int k = std::stoi(argv[2]);
+            const int eb = std::stoi(argv[3]);
+            const LnsConverter conv(11, eb);
+            const KRoot kr(k, conv);
+            for (const LnsWord w : {kr.inv, kr.invc})
+            {
+                const int32_t ly = fieldOf(w);
+                const int32_t ip = ly >> kFracBits;
+                const uint32_t fr = static_cast<uint32_t>(ly) & kFractionMask;
+                const long double m = static_cast<long double>(conv.exp2Frac(fr));
+                const long double y = std::ldexp(m, ip - 31);
+                const long double dy = y - 1.0L / k;
+                std::printf("%d %d %d %.6Le %.3Lf\n", k, eb, static_cast<int>(ly),
+                            dy * k, static_cast<long double>(kr.cap) * std::log(2.0L) * 64.0L *
+                                        std::fabs(dy));
             }
             return 0;
         }
@@ -847,7 +880,7 @@ int main(int argc, char **argv)
             return 0;
         }
         std::fprintf(stderr, "usage: %s --eval <variant> <program.s> | --size <log> <exp> | "
-                             "--sweep [n] | --keval <BK|LK|LDK|FK|FS> <k> <program.s> <fixed> <fixed a=0> | "
+                             "--sweep [n] | --keval <BK|LK|LKc|LDK|FK|FS> <k> <program.s> <fixed> <fixed a=0> | "
                              "--ksweep <n> <fixed costs>\n",
                      argv[0]);
         return 2;

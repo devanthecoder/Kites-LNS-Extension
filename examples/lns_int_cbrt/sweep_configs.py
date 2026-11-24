@@ -96,6 +96,16 @@ def cap(k: int) -> int:
     return iroot(U64, k)
 
 
+def lkc_word(k: int) -> int:
+    """LNS word of 1/k with a correctly rounded Q9.22 log: round(-log2(k) * 2^22), sign 0
+    (60-digit decimal logarithm, so the rounding is exact)."""
+    import decimal
+    decimal.getcontext().prec = 60
+    lg = decimal.Decimal(k).ln() / decimal.Decimal(2).ln()
+    field = -int((lg * (1 << 22)).to_integral_value(rounding=decimal.ROUND_HALF_EVEN))
+    return field & 0x7FFFFFFF                      # 31-bit two's-complement field, sign bit 0
+
+
 def is_pow2(v: int) -> bool:
     return v & (v - 1) == 0
 
@@ -320,6 +330,8 @@ class KProg:
         elif variant == "LDK":
             self.m, self.s = recip(k_, (64 << 22) + 1) if not is_pow2(k_) else (0, 0)
             self.consts = [self.m]
+        elif variant == "LKc":
+            self.consts = [lkc_word(k_)]
         elif variant in ("FK", "FS"):
             r, s = fp_mulhu(k_)
             self.fr, self.fs = r, s
@@ -351,6 +363,9 @@ class KProg:
                       "ldiv l12, l10, l11"]
             if self.cap_off is not None:
                 lines += ["la t0, consts"]
+        elif self.variant == "LKc":
+            # 1/k as a correctly rounded LNS constant: no fcvt/ldiv rounding on the exponent
+            lines += ["la t0, consts", "llw l12, 0(t0)"]
         elif self.variant == "LDK":
             lines += ["la s8, scratch", "la t0, consts", "ld s11, 0(t0)"]
         else:
@@ -364,7 +379,7 @@ class KProg:
         k, v = self.k, self.variant
         if v == "BK":
             return bk_blocks(k, self.count, self.m2, self.s2, self.m1, self.s1)
-        if v == "LK":
+        if v in ("LK", "LKc"):
             pre = [("", ["fcvt.lns.lu l1, s4"], "convert_in"), ("", ["lpow l2, l1, l12"], "lpow"),
                    ("", ["fcvt.lu.lns s5, l2"], "convert_out")]
         elif v == "LDK":
@@ -474,7 +489,7 @@ class KProg:
 def all_kprogs(count=True):
     progs = []
     for k in KS:
-        variants = ["BK", "LK", "LDK", "FK"] + (["FS"] if k == 2 else [])
+        variants = ["BK", "LK", "LKc", "LDK", "FK"] + (["FS"] if k == 2 else [])
         for name, vals in sweep_sets(k).items():
             for v in variants:
                 progs.append(KProg(v, k, name, vals, count))
@@ -494,7 +509,7 @@ def fixed_cost(variant, k, zero=False):
 
 
 def model_args(variant, k):
-    if variant in ("LK", "LDK"):
+    if variant in ("LK", "LKc", "LDK"):
         return [str(fixed_cost(variant, k)), str(fixed_cost(variant, k, True))]
     return ["0", "0"]
 
@@ -514,7 +529,7 @@ SIM_COLUMNS = ("k,variant,representation,input_set,n_roots,log_bits,exp_bits,ins
                "instr_compute,instr_fixup,pct_exact,candidate_pct_exact,steps_mean_abs,"
                "steps_max_abs,steps_hist,mul_per_root,div_per_root,lns_per_root,fp_per_root,"
                "code_words,program").split(",")
-REPR = {"BK": "integer", "LK": "lns_lpow", "LDK": "lns_logdiv", "FK": "fp64_newton",
+REPR = {"BK": "integer", "LK": "lns_lpow", "LKc": "lns_lpow_const_exponent", "LDK": "lns_logdiv", "FK": "fp64_newton",
         "FS": "fp64_sqrt"}
 
 
@@ -546,7 +561,7 @@ def run_one(prog, env, tables):
             fails.append("recorded fix-up candidates != C++ model")
         if any(w != f for w, f in prof["fix_costs"]):
             fails.append("fixup_cost() formula != block walk")
-        if prog.variant in ("LK", "LDK"):
+        if prog.variant in ("LK", "LKc", "LDK"):
             ph_ = prof["phases"]
             uninstr = prof["total"] - ph_.get("setup", 0) - ph_.get("count", 0)
             if sum(m[2] for m in model) != uninstr:
@@ -565,8 +580,8 @@ def run_one(prog, env, tables):
     row = {
         "k": prog.k, "variant": prog.variant, "representation": REPR[prog.variant],
         "input_set": prog.set_name, "n_roots": n,
-        "log_bits": tables[0] if prog.variant in ("LK", "LDK") else "",
-        "exp_bits": tables[1] if prog.variant in ("LK", "LDK") else "",
+        "log_bits": tables[0] if prog.variant in ("LK", "LKc", "LDK") else "",
+        "exp_bits": tables[1] if prog.variant in ("LK", "LKc", "LDK") else "",
         "instr_total": total, "instr_setup": setup, "instr_per_root": f"{per_root:.4f}",
         "instr_per_root_uninstrumented": f"{per_root - cnt:.4f}",
         "instr_convert": f"{(ph.get('convert_in', 0) + ph.get('convert_out', 0)) / n:.4f}",
@@ -592,13 +607,17 @@ def write_programs(progs):
             f.write(p.text())
 
 
-def sim_mode(table_cfgs):
+def sim_mode(table_cfgs, only=None):
+    """only: list of variants to (re)run; their rows replace the same variants' rows in
+    config_sweep.csv and every other row is kept."""
     import concurrent.futures as cf
     progs = all_kprogs()
     write_programs(progs)
+    if only:
+        progs = [p for p in progs if p.variant in only]
     jobs = []
     for p in progs:
-        if p.variant in ("LK", "LDK"):
+        if p.variant in ("LK", "LKc", "LDK"):
             for lb, eb in table_cfgs:
                 if p.k == 2 and lb < K2_MIN_LOG_BITS:
                     continue
@@ -616,8 +635,13 @@ def sim_mode(table_cfgs):
             failures += [f"{p.rel} {t}: {f}" for f in fails]
             if i % 50 == 0:
                 print(f"  {i}/{len(jobs)} runs", file=sys.stderr)
-    order = {v: i for i, v in enumerate(("BK", "FK", "FS", "LK", "LDK"))}
-    rows.sort(key=lambda r: (r["k"], order[r["variant"]], r["input_set"],
+    order = {v: i for i, v in enumerate(("BK", "FK", "FS", "LK", "LKc", "LDK"))}
+    if only and os.path.exists(SIM_CSV):
+        keep = [r for r in csv.DictReader(open(SIM_CSV)) if r["variant"] not in only]
+        for r in keep:
+            r["k"] = int(r["k"])
+        rows += keep
+    rows.sort(key=lambda r: (int(r["k"]), order[r["variant"]], r["input_set"],
                              int(r["log_bits"] or 0), int(r["exp_bits"] or 0)))
     with open(SIM_CSV, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=SIM_COLUMNS, lineterminator="\n")
@@ -638,7 +662,7 @@ def model_mode(n):
     """Large grids in the C++ model: k x table sizes x input sets for LK / LDK (accuracy,
     fix-up steps, and instructions per root from the simulator-validated cost formula)."""
     costs = ",".join(f"{v}{k}={fixed_cost(v, k)}/{fixed_cost(v, k, True)}"
-                     for k in MODEL_KS for v in ("LK", "LDK"))
+                     for k in MODEL_KS for v in ("LK", "LKc", "LDK"))
     out = subprocess.run([chk.CBRT_MODEL, "--ksweep", str(n), costs], check=True,
                          stdout=subprocess.PIPE, text=True).stdout
     with open(GRID_CSV, "w", newline="") as f:
@@ -786,11 +810,82 @@ def summary():
         print(f"| {k} | {sb} | {pb:.1f} | {sl} | {pl:.1f} | {be} |")
 
 
+# ---------------------------------------------------------------------------------------------
+# Converter sizing and exponent precision (RESULTS.md section I)
+# ---------------------------------------------------------------------------------------------
+def extra_summary():
+    grid = list(csv.DictReader(open(GRID_CSV)))
+    res = list(csv.DictReader(open(os.path.join(HERE, "results.csv"))))
+    print("#### I.1 Smallest converter tables within 1% / 5% of the best cost (C++ model, LK)\n")
+    print("Over all 144 log x exp pairs (6..16 and 23 / 22 bits). Bytes = log table + exp "
+          "table.\n")
+    print("| k | input set | best instr/root | at | smallest within 1% | smallest within 5% "
+          "| default 11/11 (32 KiB) |")
+    print("|---|---|---:|---|---|---|---:|")
+    for k in MODEL_KS:
+        for st in ("uniform_u64", "width32", "width64"):
+            rows = [r for r in grid if r["k"] == str(k) and r["variant"] == "LK" and
+                    r["input_set"] == st]
+            best = min(rows, key=lambda r: float(r["instr_per_root_model"]))
+            b = float(best["instr_per_root_model"])
+
+            def smallest(f):
+                ok = [r for r in rows if float(r["instr_per_root_model"]) <= b * f]
+                r = min(ok, key=lambda r: (int(r["table_bytes"]), float(r["instr_per_root_model"])))
+                return f"{r['log_bits']}/{r['exp_bits']} ({int(r['table_bytes']) // 1024} KiB, " \
+                       f"{float(r['instr_per_root_model']):.1f})"
+            d = [r for r in rows if r["log_bits"] == "11" and r["exp_bits"] == "11"][0]
+            print(f"| {k} | {st} | {b:.1f} | {best['log_bits']}/{best['exp_bits']} | "
+                  f"{smallest(1.01)} | {smallest(1.05)} | {float(d['instr_per_root_model']):.1f} |")
+    print()
+    print("#### I.2 Which table matters: k = 3, uniform_u64, LK instructions per root "
+          "(C++ model)\n")
+    logs = ["6", "8", "10", "11", "13", "16", "23"]
+    exps = ["6", "7", "8", "9", "10", "11", "13", "16", "22"]
+    cell = {(r["log_bits"], r["exp_bits"]): float(r["instr_per_root_model"]) for r in grid
+            if r["k"] == "3" and r["variant"] == "LK" and r["input_set"] == "uniform_u64"}
+    print("| log \\ exp | " + " | ".join(exps) + " |")
+    print("|---|" + "---:|" * len(exps))
+    for lb in logs:
+        print(f"| {lb} | " + " | ".join(f"{cell[(lb, e)]:.1f}" for e in exps) + " |")
+    print()
+    print("#### I.3 Simulator: converter bits 6..16 (k = 3, uniform_bits, log = exp bits)\n")
+    print("| bits | table bytes | L1 instr/root | L1 max steps | L2 instr/root | L2 max steps |")
+    print("|---:|---:|---:|---:|---:|---:|")
+    by = {}
+    for r in res:
+        if r["input_set"] == "uniform_bits" and r["variant"] in ("L1", "L2") and \
+                r["log_bits"] and (r["log_bits"] == r["exp_bits"] or r["log_bits"] == "23") \
+                and not r["program"].startswith("batch/"):
+            if r["log_bits"] == "23" and r["exp_bits"] != "22":
+                continue
+            by[(int(r["log_bits"]), r["variant"])] = r
+    for b in sorted({b for b, _v in by}):
+        l1, l2 = by[(b, "L1")], by[(b, "L2")]
+        print(f"| {b if b != 23 else '23/22'} | {int(l1['table_bytes']):,} | "
+              f"{float(l1['instr_per_root_uninstrumented']):.2f} | {l1['fixup_steps_max']} | "
+              f"{float(l2['instr_per_root_uninstrumented']):.2f} | {l2['fixup_steps_max']} |")
+    print()
+    print("#### I.4 Exponent (\"power\") precision: LK (1/k built with ldiv) vs LKc (correctly "
+          "rounded constant), C++ model, uniform_u64\n")
+    print("| k | exp bits | LK max steps | LKc max steps | LK instr/root | LKc instr/root |")
+    print("|---|---:|---:|---:|---:|---:|")
+    for k in MODEL_KS:
+        for e in ("6", "8", "11", "22"):
+            lbits = "23" if e == "22" else "11"
+            g = {r["variant"]: r for r in grid if r["k"] == str(k) and r["input_set"] ==
+                 "uniform_u64" and r["log_bits"] == lbits and r["exp_bits"] == e}
+            print(f"| {k} | {e} | {g['LK']['steps_max_abs']} | {g['LKc']['steps_max_abs']} | "
+                  f"{float(g['LK']['instr_per_root_model']):.2f} | "
+                  f"{float(g['LKc']['instr_per_root_model']):.2f} |")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("mode", choices=("gen", "sim", "model", "summary"))
+    ap.add_argument("mode", choices=("gen", "sim", "model", "summary", "extra"))
     ap.add_argument("--tables", default="6:6,8:8,10:10,11:11,13:13,23:22",
                     help="LOG:EXP list for LK/LDK simulator runs")
+    ap.add_argument("--only", default="", help="sim: comma list of variants to re-run")
     ap.add_argument("--n", type=int, default=100000, help="inputs per set (model mode)")
     a = ap.parse_args()
     if a.mode == "gen":
@@ -799,8 +894,10 @@ if __name__ == "__main__":
         print(f"{len(ps)} programs -> {OUT_DIR}")
     elif a.mode == "sim":
         cfgs = [tuple(int(x) for x in c.split(":")) for c in a.tables.split(",")]
-        sys.exit(sim_mode(cfgs))
+        sys.exit(sim_mode(cfgs, a.only.split(",") if a.only else None))
     elif a.mode == "model":
         sys.exit(model_mode(a.n))
+    elif a.mode == "extra":
+        extra_summary()
     else:
         summary()

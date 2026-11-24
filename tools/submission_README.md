@@ -40,7 +40,10 @@ the simulator core links Qt.
 
 ### Windows (GUI, PowerShell)
 
-Needs Python 3. Install Qt 6.9.2 `win64_mingw`, its MinGW 13.1 toolchain, CMake and Ninja:
+Needs Python 3. Open PowerShell in the `code` folder and run these blocks in order, in the
+same window.
+
+**1. Install Qt 6.9.2, the MinGW 13.1 toolchain, CMake and Ninja** (once per machine):
 
 ```powershell
 python -m pip install aqtinstall cmake ninja
@@ -48,35 +51,71 @@ python -m aqt install-qt windows desktop 6.9.2 win64_mingw -O C:\Qt
 python -m aqt install-tool windows desktop tools_mingw1310 -O C:\Qt
 ```
 
-If a download times out, add `-b https://mirrors.dotsrc.org/qt/` to the two `aqt` lines. If
-`cmake` is then not found, add pip's `Scripts` folder (shown in pip's warning) to `PATH`.
-If the folder path contains spaces, map it to a drive letter first (`subst K: <path-to-code>`,
-then `cd K:\`).
+If either `aqt` download times out, run that line again with a different mirror:
 
 ```powershell
-$env:PATH = "C:\Qt\Tools\mingw1310_64\bin;C:\Qt\6.9.2\mingw_64\bin;$env:PATH"
+python -m aqt install-qt windows desktop 6.9.2 win64_mingw -O C:\Qt -b https://mirrors.dotsrc.org/qt/
+python -m aqt install-tool windows desktop tools_mingw1310 -O C:\Qt -b https://mirrors.dotsrc.org/qt/
+```
+
+**2. Set up the window** (in every new PowerShell window). This puts pip's CMake/Ninja, MinGW and
+Qt on `PATH`, and maps the folder to drive `K:` so that spaces in the path cannot break the build:
+
+```powershell
+$pyScripts = python -c "import sysconfig, os; print(sysconfig.get_path('scripts') + ';' + sysconfig.get_path('scripts', os.name + '_user'))"
+$env:PATH = "$pyScripts;C:\Qt\Tools\mingw1310_64\bin;C:\Qt\6.9.2\mingw_64\bin;$env:PATH"
+subst K: /D 2>$null
+subst K: "$PWD"
+cd K:\
+```
+
+**3. Build and start the GUI** (about 5–10 minutes):
+
+```powershell
 cmake -S . -B build\gui -G Ninja -DCMAKE_BUILD_TYPE=Debug `
   -DCMAKE_PREFIX_PATH=C:/Qt/6.9.2/mingw_64 `
   -DCMAKE_C_COMPILER=C:/Qt/Tools/mingw1310_64/bin/gcc.exe `
   -DCMAKE_CXX_COMPILER=C:/Qt/Tools/mingw1310_64/bin/g++.exe `
   -DDISABLE_GUI=OFF -DTEST_DIR=test
 cmake --build build\gui --target Kites -j4
+.\build\gui\Kites.exe
 ```
 
-The first line is needed in every new PowerShell window: without the MinGW folder on `PATH`,
-`g++` fails on every file with no error message. Then run `build\gui\Kites.exe` from the same
-window. Select the single-cycle (RVSS) core; the LNS registers `l0`–`l31` appear in the register
-view. `examples/lns_lj/lj_lns.s` is a ready program to open and run.
+In the GUI, select the single-cycle (RVSS) core; the LNS registers `l0`–`l31` appear in the
+register view. `examples/lns_lj/lj_lns.s` is a ready program to open and run.
+
+**Tests on Windows** (same window, after step 2):
+
+```powershell
+cmake -S . -B build\test -G Ninja -DCMAKE_BUILD_TYPE=Debug `
+  -DCMAKE_PREFIX_PATH=C:/Qt/6.9.2/mingw_64 `
+  -DCMAKE_C_COMPILER=C:/Qt/Tools/mingw1310_64/bin/gcc.exe `
+  -DCMAKE_CXX_COMPILER=C:/Qt/Tools/mingw1310_64/bin/g++.exe `
+  -DDISABLE_GUI=ON -DENABLE_TESTS=ON -DTEST_DIR=test
+cmake --build build\test --target kites_test -j4
+.\build\test\test\kites_test.exe --gtest_filter="LnsInstructions.*:*LnsCbrtKernel*"
+```
 
 ### Linux / WSL (command line, used for all benchmarks)
 
 Always pass `-DTEST_DIR=test` (as below): without it, the upstream `CMakeLists.txt` searches the
 whole disk for test files and configuring takes very long.
 
-Ubuntu packages: `build-essential cmake ninja-build python3 libgl1-mesa-dev libxkbcommon-dev`.
-Qt: `pip install aqtinstall && python3 -m aqt install-qt linux desktop 6.9.2 linux_gcc_64 -O ~/Qt`.
+Install the tools and Qt once (Ubuntu / WSL; Qt goes to `~/Qt`, the Python tools to a virtual
+environment `~/kites-venv`):
 
 ```bash
+sudo apt update
+sudo apt install -y build-essential cmake ninja-build python3 python3-venv git libgl1-mesa-dev libxkbcommon-dev
+python3 -m venv ~/kites-venv
+~/kites-venv/bin/pip install aqtinstall matplotlib
+~/kites-venv/bin/aqt install-qt linux desktop 6.9.2 linux_gcc_64 -O ~/Qt
+```
+
+Then, in each new terminal, from `code/`:
+
+```bash
+source ~/kites-venv/bin/activate
 cmake -S . -B ~/kites-bench -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_PREFIX_PATH=$HOME/Qt/6.9.2/gcc_64 -DDISABLE_GUI=ON -DTEST_DIR=test
 cmake --build ~/kites-bench --target kites_cli -j4
@@ -101,24 +140,29 @@ Expected: 46 tests pass (25 LNS instruction tests, 21 cube-root edge cases). The
 runs upstream tests; 5 upstream `FpFmaConversion.DoublePrecisionFma` cases fail without our
 changes too and are unrelated to LNS.
 
-On Windows: the same configure line as the GUI build with `-B build\test -DDISABLE_GUI=ON
--DENABLE_TESTS=ON`, then `cmake --build build\test --target kites_test` and
-`build\test\test\kites_test.exe --gtest_filter=...`.
+On Windows, see "Tests on Windows" in section 1.
 
 ## 3. Benchmarks: run on the simulator and check against the C++ models
 
 Each benchmark has an independent C++ model, and the simulator must match it bit for bit. Each
-README has the full instructions; these are the quick checks (Linux / WSL, from `code/`).
+README has the full instructions; these are the quick checks (Linux / WSL, from `code/`, in the
+terminal where `kites-cli` was built in section 1):
+
+```bash
+source ~/kites-venv/bin/activate
+export KITES_CLI=~/kites-bench/kites-cli
+```
 
 **Lennard-Jones energy** (`examples/lns_lj/README.md`), seconds:
 ```bash
 g++ -std=c++20 -O2 -I src/processor/lns tools/lns_lj_accuracy.cpp \
     src/processor/lns/lns_alu.cpp src/processor/lns/lns_conversion.cpp \
     src/processor/lns/lns_cordic_addsub.cpp src/processor/lns/lns_pow.cpp -o lns_lj_accuracy
-./lns_lj_accuracy        # final energy word for every table size
 (cd examples/lns_lj && $KITES_CLI lj_lns.s --vm rvss > /dev/null)
-# compare l10 in examples/lns_lj/vm_state/registers_dump.json with the model's default-table word
+./lns_lj_accuracy | grep "alu 16384 (default)"
+python3 -c "import json; w = json.load(open('examples/lns_lj/vm_state/registers_dump.json'))['lns_registers']['l10']; print('simulator l10:', '0x' + w[2:].upper())"
 ```
+Expected: the model's line shows `0x818C259B`, and the simulator prints the same word.
 
 **Lennard-Jones molecular dynamics** (`examples/lns_lj_md/README.md`), about a minute:
 ```bash
@@ -143,14 +187,17 @@ Expected: `ALL CHECKS PASSED` (125 simulator runs, 20,868 per-input checks).
 
 ## 4. Results, estimates and plots
 
-These only re-derive the committed CSVs and figures. They need Python 3 with matplotlib.
+These only re-derive the committed CSVs and figures (Linux / WSL, from `code/`, after
+`source ~/kites-venv/bin/activate`, which provides matplotlib).
 
 - **MD cycle estimate, table-size trade-off and plots:** `python3 examples/lns_lj_md/plot_md.py`
   (reads the committed sweep results).
 - **MD software time:** `bash examples/lns_lj_md/time_md.sh` (needs `lns_lj_md_model`).
-- **Table access times (CACTI 7):** build CACTI
-  (`git clone https://github.com/HewlettPackard/cacti && cd cacti && make`), then
-  `CACTI=/path/to/cacti/cacti python3 examples/lns_lj_md/table_latency.py`.
+- **Table access times (CACTI 7):**
+  ```bash
+  git clone https://github.com/HewlettPackard/cacti ~/cacti && make -C ~/cacti
+  CACTI=~/cacti/cacti python3 examples/lns_lj_md/table_latency.py
+  ```
 - **Integer cycle estimate and plots:**
   `CBRT_MODEL=./lns_cbrt_accuracy python3 examples/lns_int_cbrt/scripts/latency_model.py`, then
   `CBRT_MODEL=./lns_cbrt_accuracy python3 examples/lns_int_cbrt/scripts/make_plots.py`.

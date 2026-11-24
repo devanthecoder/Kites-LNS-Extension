@@ -722,28 +722,30 @@ same file as a cross-check.
 
 ### I.E Every latency used, one fixed value per instruction
 
-Raw: `results/latency_assumptions.csv`. Same format as the Lennard-Jones table. "Overlapped"
-follows the LJ convention (pipelined units issue one per cycle; dividers and square root keep
-their full latency). The cbrt estimate is a serial sum and uses only the Latency column.
+Raw: `results/latency_assumptions.csv`. Same format as the Lennard-Jones table. The estimate is a
+serial sum over the single-cycle KITES core, so there is no "overlapped" (pipelined) column:
+LNS only runs on that core and there is no pipeline to model (the LJ MD benchmark dropped it
+for the same reason). LNS convert and `lpow` are fixed at 4 and 8 cycles for the default 11/11-bit
+tables and scale with table size as described in I.G.
 
-| Instruction | Used by | Latency (cycles) | Overlapped | Where the number comes from | Guess? |
-|---|---|---:|---:|---|---|
-| Integer ALU (addi, add, sub, shifts, mv, sltiu, li, la) | all | 1 | 1 | Same core for every format (single-cycle integer units on ELM and TMS) | Assumption |
-| Branches, jumps (beqz, bnez, bgeu, bltu, beq, j) | all | 1 | 1 | No branch penalty | Assumption |
-| ld, lbu, lwu | all | 1 | 1 | Table 3, ELM load (cache hit) | From paper |
-| sd, sw | all | 1 | 1 | Same core for every format (as in the LJ table) | Assumption |
-| mul, mulw, mulhu | B0, B1; fix-up of L1, L2, F0 | 3 | 1 | SiFive U74 Core Complex Manual, Table 6 | Datasheet, not paper |
-| divu | B0, B1 (Newton step) | 20 | 20 | SiFive U74 manual: 6-68 cycles depending on operands; 20 picked inside that range | Guess within a datasheet range |
-| fcvt.lns.lu, fcvt.lu.lns, fcvt.lns.w | all LNS variants (2 per root) | 4 | 1 | The paper describes converter designs but gives no cycle count; 4 as in the LJ table | Guess |
-| lpow | L0, L1, LK (1 per root) | 8 | 1 | Derived from KITES' lpow: exp-table stage (lookup + interpolating multiply-add, the same work as an LNS->int convert = 4) + log(x) * y multiply (the same as LJ's lpown = 4) | Derived from our assumptions |
-| ldiv | L2, LDK; setup of L1/LK | 1 | 1 | Table 3, ELM divide | From paper |
-| llw, lsw | setup only (building 1/k) | 1 | 1 | Same core for every format (ELM: load 1, store 2) | Assumption |
-| fadd.d | F0, FK | 4 | 1 | Table 3, TMS320C6711 add (an FP32 chip, used for FP64) | From paper |
-| fmul.d | F0, FK | 4 | 1 | Table 3, TMS320C6711 multiply | From paper |
-| fdiv.d | F0, FK (3 per root) | 30 | 30 | Table 3, TMS320C6711 divide (~30) | From paper |
-| fsqrt.d | FS (k = 2 only) | 40 | 40 | Table 3, TMS320C6711 square root (~40) | From paper |
-| fcvt.d.lu, fcvt.lu.d | F0, FK | 4 | 1 | Taken equal to the TMS add pipeline | Guess |
-| fmv.x.d, fmv.d.x | F0 | 1 | 1 | Register move | Assumption |
+| Instruction | Used by | Latency (cycles) | Where the number comes from | Guess? |
+|---|---|---:|---|---|
+| Integer ALU (addi, add, sub, shifts, mv, sltiu, li, la) | all | 1 | Same core for every format (single-cycle integer units on ELM and TMS) | Assumption |
+| Branches, jumps (beqz, bnez, bgeu, bltu, beq, j) | all | 1 | No branch penalty | Assumption |
+| ld, lbu, lwu | all | 1 | Table 3, ELM load (cache hit) | From paper |
+| sd, sw | all | 1 | Same core for every format (as in the LJ table) | Assumption |
+| mul, mulw, mulhu | B0, B1; fix-up of L1, L2, F0 | 3 | SiFive U74 Core Complex Manual, Table 6 | Datasheet, not paper |
+| divu | B0, B1 (Newton step) | 20 | SiFive U74 manual: 6-68 cycles depending on operands; 20 picked inside that range | Guess within a datasheet range |
+| fcvt.lns.lu, fcvt.lu.lns, fcvt.lns.w | all LNS variants (2 per root) | 4 at 11/11 bits | 4 cycles at 11/11 bits (assumed: the paper gives no converter cycle count; as in the LJ table), scaled with table size by CACTI 7: only the table-read share 5/28 (Parhami 2020 section 4.2) scales. fcvt.lns.* reads the log table, fcvt.lu.lns the exp table | Guess, scaled by CACTI |
+| lpow | L0, L1, LK (1 per root) | 8 at 11/11 bits | 8 cycles at 11/11 bits (derived): exp-table stage 4 (same work as an LNS->int convert) + log(x)*y multiply 4 (= LJ's lpown). Scaled with exp-table size by CACTI 7: only the exp-table stage's read share 5/28 (Parhami 2020 section 4.2) scales, the multiply does not | Derived, scaled by CACTI |
+| ldiv | L2, LDK; setup of L1/LK | 1 | Table 3, ELM divide | From paper |
+| llw, lsw | setup only (building 1/k) | 1 | Same core for every format (ELM: load 1, store 2) | Assumption |
+| fadd.d | F0, FK | 4 | Table 3, TMS320C6711 add (an FP32 chip, used for FP64) | From paper |
+| fmul.d | F0, FK | 4 | Table 3, TMS320C6711 multiply | From paper |
+| fdiv.d | F0, FK (3 per root) | 30 | Table 3, TMS320C6711 divide (~30) | From paper |
+| fsqrt.d | FS (k = 2 only) | 40 | Table 3, TMS320C6711 square root (~40) | From paper |
+| fcvt.d.lu, fcvt.lu.d | F0, FK | 4 | Taken equal to the TMS add pipeline | Guess |
+| fmv.x.d, fmv.d.x | F0 | 1 | Register move | Assumption |
 
 **Why `lpow` is 8 and not 4.** LJ's `lpown` multiplies the log by an integer: one multiply, 4
 cycles. KITES' `lpow` (`src/processor/lns/lns_pow.cpp`) first has to turn the exponent y back
@@ -776,6 +778,90 @@ per root, everything else fixed):
 - **`divu`** only moves the integer baseline: 6–68 cycles puts B1 between 89 and
   208. L1 wins at every point of that range.
 - Plot `plots/7b_sensitivity.png` shows both break-evens.
+
+### I.G Converter table size: estimated time vs accuracy (CACTI-scaled, ESTIMATE)
+
+**Question.** A bigger converter table gives a more accurate result (fewer fix-up steps, section
+I.A) but is slower to read. Where is the best trade-off for the integer cube root? This is the
+integer counterpart of the Lennard-Jones MD accuracy-vs-speed study.
+
+**Method** (`scripts/latency_model.py`, the same method as `examples/lns_lj_md/table_latency.py`
+on branch Devadath):
+
+1. **CACTI 7** (<https://github.com/HewlettPackard/cacti>, commit `1ffd8df`) gives the access time
+   of one 2^k-entry table (8-byte entries, single-ported RAM, 45 nm, the MD script's
+   configuration) for k = 6..16: `results/cacti_table_latency.csv`, rows `conversion`. Check:
+   2,048 entries (11 bits) = 0.3352 ns and 4,096 entries (12 bits) = 0.4185 ns, as in the MD run.
+2. **Only the table-read share scales.** Parhami 2020 (section 4.2 / Table 1, citing Coleman &
+   Chester 1999) puts a 5 ns ROM access inside the 28 ns LNS add, so the read is 5/28 of the
+   operation: s(k) = 23/28 + 5/28 × access(k) / access(11).
+3. fcvt.lns.* reads the **log** table and fcvt.lu.lns and `lpow` read the **exp** table:
+   to_lns = 4 s(log), from_lns = 4 s(exp), lns_convert = (to_lns + from_lns) / 2 (one in and one
+   out per root), lpow = 4 s(exp) + 4 (the exp-table stage scales; the multiply does not).
+4. Each table size uses **its own measured instruction mix**: the static model of the N = 1024
+   uniform_bits program with the C++ model's fix-up candidates at that table size. For every
+   row it matches `results/results.csv` (simulator) exactly. No simulator run was repeated.
+5. 23/22-bit tables (96 MiB) have no CACTI value and are marked "not modelled" (not
+   extrapolated).
+
+**Check:** at 11/11 bits the scaled latencies are exactly 4.0 and 8.0, so every default-table
+number above is unchanged (L1 39.59, B1 116.06, F0 175.51 cycles per root).
+
+**k = 3, uniform_bits (log = exp bits). B1 = 116.1 and F0 = 175.5 cycles do not depend on the
+tables.**
+
+| bits | both tables (bytes) | CACTI access (ns) | convert (cycles) | `lpow` (cycles) | L1 instr/root | **L1 cycles/root** | L1 worst fix-up | L2 cycles/root | L0 cycles/root (approx) | L0 % exact |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 6 | 1,024 | 0.1757 | 3.66 | 7.66 | 153.17 | **309.1** | 573 | 47.9 | 21.0 | 25.6 |
+| 7 | 2,048 | 0.1968 | 3.71 | 7.71 | 31.70 | **66.2** | 65 | 41.3 | 21.1 | 33.0 |
+| 8 | 4,096 | 0.2181 | 3.75 | 7.75 | 22.66 | **48.2** | 25 | 40.1 | 21.2 | 35.3 |
+| 9 | 8,192 | 0.2391 | 3.79 | 7.79 | 18.48 | **40.0** | 7 | 40.1 | 21.4 | 39.1 |
+| 10 | 16,384 | 0.2824 | 3.89 | 7.89 | 18.19 | **39.2** | 3 | 40.3 | 21.7 | 52.6 |
+| 11 | 32,768 | 0.3352 | 4.00 | 8.00 | 18.23 | **39.6** | 3 | 40.5 | 22.0 | 52.7 |
+| 12 | 65,536 | 0.4185 | 4.18 | 8.18 | 18.25 | **40.1** | 3 | 40.9 | 22.5 | 52.6 |
+| 13 | 131,072 | 0.5344 | 4.42 | 8.42 | 18.24 | **40.9** | 3 | 41.4 | 23.3 | 52.7 |
+| 14 | 262,144 | 0.7318 | 4.84 | 8.85 | 18.24 | **42.1** | 3 | 42.2 | 24.5 | 52.7 |
+| 15 | 524,288 | 1.0306 | 5.48 | 9.48 | 18.24 | **44.0** | 3 | 43.5 | 26.4 | 52.7 |
+| 16 | 1,048,576 | 1.3956 | 6.26 | 10.26 | 18.24 | **46.4** | 3 | 45.0 | 28.8 | 52.7 |
+| 23/22 | 100,663,296 | – | not modelled | not modelled | 18.23 | not modelled | 3 | not modelled | not modelled | 52.8 |
+
+Raw: `results/latency_estimates.csv` (rows `kind = table_sweep`) and
+`plots/data/9_table_size_time_vs_accuracy.csv`; plot `plots/9_table_size_time_vs_accuracy.png`.
+
+**What it says**
+
+1. **The fastest exact LNS configuration is 10 bits (16 KiB): 39.2 cycles per root**, slightly
+   faster than the 11-bit default (39.6) and with the same worst fix-up (3 steps). Below 9 bits
+   the extra fix-up steps cost far more than the faster table saves (6 bits: 309 cycles, worse
+   than integer). Above 11 bits the table only gets slower: 46.4 cycles at 16 bits (1 MiB) for
+   no accuracy gain.
+2. **The table-read effect is small next to the fix-up effect.** From 6 to 16 bits the convert
+   only goes from 3.66 to 6.26 cycles. The fix-up steps move L1 by a factor of 8.
+3. **L2 (no `lpow`) is the more robust LNS option:** it stays between 40 and 48 cycles at every
+   size, and it beats L1 at 8 bits or fewer and at 15 bits or more.
+4. **From 9 to 16 bits L1 is 2.5× to 3.0× faster than integer and 3.8× to 4.5× faster than FP64.**
+   At 7–8 bits the lead shrinks to 1.8–2.4× over integer, and at 6 bits L1 loses (309 vs 116).
+
+**Honest limits of this estimate**
+
+- **The 4-cycle convert is an assumption.** The paper gives no converter latency, so the
+  absolute numbers stand on that guess. CACTI only changes how it scales.
+- **The 5/28 read share comes from the LNS adder, not from a converter or `lpow`.** A converter
+  is little more than a table read plus an interpolation, so its read share is probably larger
+  than 5/28. In that case big tables would cost more than shown here and the case for 9–10-bit
+  tables would get stronger. For `lpow` the share is applied to the exp-table stage only, which
+  is the same assumption one level down.
+- **CACTI models a generic 45 nm SRAM with 8-byte entries**, not the KITES table format, and
+  0.7 µm ROM in the paper. Only the *ratio* access(k) / access(11) is used, which is the most
+  transferable part.
+- Serial sum, no pipelining, as everywhere in section I.
+
+**Sources:** B. Parhami, "Computing with logarithmic number system arithmetic: Implementation
+methods and performance benefits", Computers and Electrical Engineering 87 (2020) 106800
+(`docs/LNSResearchPaper.pdf`). J. N. Coleman, E. I. Chester, "A 32-Bit Logarithmic Arithmetic
+Unit and Its Performance Compared to Floating-Point", Proc. 14th IEEE Symposium on Computer
+Arithmetic (ARITH-14), 1999 (`docs/Coleman1999_32bit_LNS_unit_ARITH14.pdf` on branch Devadath).
+CACTI 7, <https://github.com/HewlettPackard/cacti>, commit `1ffd8df`.
 
 ## What must not be claimed
 

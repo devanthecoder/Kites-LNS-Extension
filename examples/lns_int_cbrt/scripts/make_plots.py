@@ -247,7 +247,8 @@ save(fig, "6_batch_size.png", "Measured on KITES rvss, uniform_bits prefixes, 11
 # 7. time estimate (ESTIMATE) -----------------------------------------------------------------
 import latency_model as lm  # noqa: E402
 
-est = [r for r in rd("latency_estimates.csv") if r["k"] == "3" and r["input_set"] == "uniform_bits"]
+est = [r for r in rd("latency_estimates.csv") if r["k"] == "3" and r["input_set"] == "uniform_bits"
+       and r.get("kind", "default") == "default"]
 wr("7a_time_estimate_k3.csv", [{**r, "note": "ESTIMATE: Parhami 2020 Tables 1/3 + assumptions "
                                 "(convert, lpow latency); serial sum, no pipelining"} for r in est])
 order = ["B1", "F0", "L1", "L2", "B0", "L0"]
@@ -305,6 +306,47 @@ axs[0].legend(fontsize=10, loc="upper left")
 fig.suptitle("ESTIMATE: how slow could the unmeasured LNS ops be before L1 loses?")
 save(fig, "7b_sensitivity.png", "ESTIMATE. Solid green line = the fixed value used in the "
      "headline (the paper gives no lpow or converter latency). Every other latency at its fixed value.")
+
+# 9. converter table size: estimated time vs accuracy (ESTIMATE, CACTI-scaled) ----------------
+sw = [r for r in rd("latency_estimates.csv") if r.get("kind") == "table_sweep"]
+b1c, f0c = fixed["B1"], fixed["F0"]
+rows = [{"log_bits": r["log_bits"], "exp_bits": r["exp_bits"], "variant": r["variant"],
+         "instr_per_root": r["instr_per_root"], "lns_convert_cycles": r["lns_convert_cycles"],
+         "lpow_cycles": r["lns_pow_cycles"], "est_cycles_per_root": r["A_cycles_fixed"],
+         "B1_cycles": f"{b1c:.2f}", "F0_cycles": f"{f0c:.2f}",
+         "fixup_steps_max": r["fixup_steps_max"], "pct_exact": r["pct_exact"],
+         "note": r["note"] or "ESTIMATE: convert 4 / lpow 8 at 11 bits, table-read share 5/28 "
+                              "scaled by CACTI 7 access time"} for r in sw]
+wr("9_table_size_time_vs_accuracy.csv", rows)
+fig, (ax, ax2) = plt.subplots(2, 1, figsize=(10, 7.5), sharex=True,
+                              gridspec_kw={"height_ratios": [3, 1.3]})
+for v, c, lab in (("L1", COL["lns"], "L1 LNS lpow (exact)"), ("L2", COL["lns2"], "L2 LNS log-divide (exact)")):
+    pts = [(int(r["log_bits"]), F(r["A_cycles_fixed"])) for r in sw
+           if r["variant"] == v and r["A_cycles_fixed"]]
+    ax.plot(*zip(*pts), "o-", color=c, lw=2.5, label=lab)
+    for x, y in pts:
+        if v == "L1" and x in (6, 10, 16):
+            ax.annotate(f"{y:.1f}", (x, y), xytext=(0, 8), textcoords="offset points",
+                        ha="center", fontsize=9, color=c)
+ax.axhline(b1c, color=COL["integer"], ls="--", label=f"B1 integer ({b1c:.1f})")
+ax.axhline(f0c, color=COL["fp"], ls="--", label=f"F0 FP64 ({f0c:.1f})")
+logy(ax, [20, 30, 50, 100, 200, 300])
+ax.set_ylabel("estimated cycles per root (log scale)")
+ax.set_title("ESTIMATE: converter table size, time vs accuracy (k = 3)")
+ax.legend(fontsize=9, ncol=2)
+pts = [(int(r["log_bits"]), int(r["fixup_steps_max"])) for r in sw if r["variant"] == "L1"
+       and r["A_cycles_fixed"]]
+ax2.bar([x for x, _ in pts], [y for _, y in pts], color=COL["lns"], alpha=0.8)
+for x, y in pts:
+    ax2.text(x, y * 1.15, str(y), ha="center", fontsize=8)
+ax2.set_yscale("log")
+ax2.set_ylabel("L1 worst\nfix-up steps")
+ax2.set_xlabel("converter table bits (log = exp)")
+ax2.set_xticks(range(6, 17))
+save(fig, "9_table_size_time_vs_accuracy.png", "ESTIMATE. Convert 4 / lpow 8 cycles at 11 bits "
+     "(assumed / derived); only the table-read share (5/28, Parhami 2020 s.4.2) scales with the\n"
+     "CACTI 7 access time. Instruction counts and fix-up steps measured on KITES (uniform_bits). "
+     "23/22-bit tables not modelled (no CACTI value).")
 
 # 8. exponent precision predicts fix-up ------------------------------------------------------
 model = os.environ.get("CBRT_MODEL", "/home/user/buildsrc/lns_cbrt_accuracy")

@@ -37,7 +37,8 @@ computed in C++ (`tools/lns_lj_md_model.cpp`), from the same inputs, with the ex
 | `sweep_md.sh` | Runs every configuration in the simulator and collects the results |
 | `time_md.sh` | Measures the software run time of the whole simulation on the host |
 | `plot_md.py` | Computes the cycle estimate and draws the plots |
-| `results/` | `md_runs.csv` (one row per run), `md_samples.csv` (every logged sample), `md_counts.csv` (instruction counts), `md_cycles.csv` (cycle estimate), `md_cycles_divide.csv` (estimate for other `fdiv.s` latencies), `md_averages.csv` (run averages), `md_software_time.csv` (software run time), `plots/` (PDF figures) |
+| `table_latency.py` | Estimates the add/sub latency at each table size with CACTI |
+| `results/` | `md_runs.csv` (one row per run), `md_samples.csv` (every logged sample), `md_counts.csv` (instruction counts), `md_cycles.csv` (cycle estimate), `md_cycles_divide.csv` (estimate for other `fdiv.s` latencies), `md_averages.csv` (run averages), `md_table_latency.csv` (CACTI table access times), `md_table_tradeoff.csv` (speed-up and accuracy per table size), `md_software_time.csv` (software run time), `plots/` (PDF figures) |
 
 ## Measures (all against FP64)
 
@@ -93,6 +94,9 @@ The sweep covers:
    python3 examples/lns_lj_md/plot_md.py
    ```
    - `plot_md.py` needs matplotlib.
+   - For the table-size latency, build CACTI first
+     (`git clone https://github.com/HewlettPackard/cacti && cd cacti && make`), then run
+     `CACTI=/path/to/cacti/cacti python3 examples/lns_lj_md/table_latency.py` before `plot_md.py`.
 
 ## Run time
 
@@ -121,6 +125,12 @@ both for dt = 0.005 and 200 steps:
   paper does; LNS runs only on the single-cycle core, so there is no pipeline to model. Since
   the divide latency comes from an old chip and divides are a large share of FP32's cycles,
   `md_cycles_divide.csv` repeats the estimate with `fdiv.s` at 10 and 20 cycles.
+- **Table size and latency:** a bigger table is slower to read. `table_latency.py` runs CACTI 7
+  (a standard memory model) for each table size: entries × 8 bytes (value and slope), 45 nm.
+  Only the table read scales: in the paper, the 28 ns LNS add includes a 5 ns ROM access
+  (section 4.2), so add/sub latency = paper latency × (23/28 + 5/28 × access(size) /
+  access(4096 entries)), anchored so the default 4096-entry table keeps the paper's 3 / 3.5
+  cycles. `plot_md.py` combines this with each size's accuracy into `md_table_tradeoff.csv`.
 - **Measured software time (host):** `time_md.sh` times the C++ model running the whole simulation
   many times on one CPU core and reports the median. FP runs on the host's FP hardware and LNS
   on the simulator's C++ arithmetic, so this is the cost of LNS done in software.

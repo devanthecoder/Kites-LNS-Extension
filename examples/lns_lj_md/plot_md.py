@@ -3,7 +3,8 @@
 
 Reads results/md_runs.csv, md_samples.csv, md_counts.csv (from sweep_md.sh) and
 md_software_time.csv (from time_md.sh). Writes results/md_cycles.csv, md_cycles_divide.csv,
-md_averages.csv and PDF figures in results/plots/.
+md_averages.csv, md_table_tradeoff.csv (if table_latency.py has written md_table_latency.csv) and
+PDF figures in results/plots/.
 
 Averages (md_averages.csv): the kinetic and potential energy averaged over each run's logged
 samples after step 0, compared with FP64 at the same (dt, steps). Trajectories of a chaotic system
@@ -432,6 +433,61 @@ def plot_averages(avg):
     save(fig, "md_averages.pdf")
 
 
+def table_tradeoff(counts, runs):
+    """Estimated speed-up and accuracy per add/sub table size, with CACTI-scaled add/sub latency."""
+    path = os.path.join(RES, "md_table_latency.csv")
+    if not os.path.exists(path):
+        print("skipped md_table_tradeoff: run table_latency.py first")
+        return
+    lat = {int(r["entries"]): r for r in read("md_table_latency.csv") if r["table"] == "addsub"}
+    lns = counts["lns_alu4096"]  # the same program runs at every table size
+    rest = sum(n * latency(m, 0) for m, n in lns.items() if m not in ("ladd", "lsub"))
+    fp = sum(n * latency(m, 0) for m, n in counts["fp32"].items())
+    rows = []
+    for entries in sorted(lat):
+        r = lat[entries]
+        total = rest + lns["ladd"] * float(r["ladd_cycles"]) + lns["lsub"] * float(r["lsub_cycles"])
+        run_row = run(runs, "lns_alu%d" % entries, "0.005", "200")
+        rows.append([entries, r["ladd_cycles"], r["lsub_cycles"], round(total), "%.3f" % (fp / total),
+                     run_row["max_energy_err"], run_row["final_pos_dev"], r["area_mm2"]])
+    with open(os.path.join(RES, "md_table_tradeoff.csv"), "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["entries", "ladd_cycles", "lsub_cycles", "lns_cycles", "speedup_vs_fp32",
+                    "max_energy_err", "final_pos_dev", "table_area_mm2"])
+        w.writerows(rows)
+    print("wrote results/md_table_tradeoff.csv")
+    for r in rows:
+        print("  %6d entries: add/sub %s/%s cycles, %sx FP32, energy error %s, area %s mm2" %
+              (r[0], r[1], r[2], r[4], r[5], r[7]))
+
+    fig, ax = plt.subplots(figsize=(4.8, 3.1))
+    x = [float(r[5]) for r in rows]
+    y = [float(r[4]) for r in rows]
+    ax.plot(x, y, color=SERIES["lns_alu4096"][0], marker="D", label="LNS table (CACTI-scaled add/sub)")
+    names = {256: "256", 1024: "1K", 4096: "4K", 16384: "16K", 65536: "64K"}
+    for r, xx, yy in zip(rows, x, y):
+        if r[0] in names:
+            ax.annotate(names[r[0]], (xx, yy), textcoords="offset points",
+                        xytext=(-6, -12) if r[0] == 65536 else (4, 5), fontsize=6.5, color=INK2)
+    fp_err = float(run(runs, "fp32", "0.005", "200")["max_energy_err"])
+    ax.plot([fp_err], [1.0], marker="o", color=SERIES["fp32"][0], linestyle="none", markersize=6,
+            label="FP32")
+    cor_err = float(run(runs, "cordic_conv11", "0.005", "200")["max_energy_err"])
+    for c in (55, 106):
+        tot = rest + (lns["ladd"] + lns["lsub"]) * c
+        ax.plot([cor_err], [fp / tot], marker="^", color=SERIES["cordic_conv11"][0], linestyle="none",
+                markersize=6, label="LNS CORDIC (55 / 106 cycles)" if c == 55 else None)
+    ax.axhline(1.0, color=MUTED, linewidth=0.8, linestyle=":")
+    ax.set_xscale("log")
+    ax.set_ylim(0, 2.3)
+    ax.set_xlabel("Energy error vs FP64 (max over run)")
+    ax.set_ylabel("Estimated speed-up over FP32")
+    ax.set_title("Accuracy against speed (dt 0.005, 200 steps)", loc="left")
+    ax.legend(loc="lower right")
+    fig.tight_layout()
+    save(fig, "md_table_tradeoff.pdf")
+
+
 def plot_software_time():
     path = os.path.join(RES, "md_software_time.csv")
     if not os.path.exists(path):
@@ -476,6 +532,7 @@ def main():
     plot_breakeven(counts)
     write_divide_sensitivity(counts)
     plot_averages(write_averages(samples))
+    table_tradeoff(counts, runs)
     plot_software_time()
     return 0
 

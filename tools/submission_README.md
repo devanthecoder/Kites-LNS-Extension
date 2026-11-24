@@ -38,44 +38,56 @@ be re-run to check a number.
 All commands are run from `code/`. Qt 6.9.2 is needed even for the command-line build, because
 the simulator core links Qt.
 
-### Windows (GUI, PowerShell)
+### Windows (GUI)
 
-Needs Python 3. Open PowerShell in the `code` folder and run these blocks in order, in the
-same window.
+Qt 6.9.2 with its MinGW 13.1 compiler, CMake and Ninja are needed. These are the same tools the
+official Qt installer provides (its CMake is the signed Kitware build).
 
-**1. Install Qt 6.9.2, the MinGW 13.1 toolchain, CMake and Ninja** (once per machine):
+#### Option A: Qt Creator (if Qt 6.9.2 or newer with MinGW is already installed)
+
+1. File → Open File or Project → `code/CMakeLists.txt`.
+2. Select a **MinGW** kit (for example "Desktop Qt 6.9.2 MinGW 64-bit"), not an MSVC kit: the
+   KITES build uses GCC-only flags.
+3. Projects → Build → CMake → Initial Configuration: add `TEST_DIR` with value `test`, then
+   "Re-configure with Initial Parameters". Without it, the original KITES `CMakeLists.txt`
+   searches the whole drive for test files and configuring takes very long.
+4. Select the `Kites` target and press Run.
+
+#### Option B: PowerShell
+
+Needs Python 3 (only to download Qt). Open PowerShell in the `code` folder and run these blocks in
+order, in the same window.
+
+**1. Install Qt 6.9.2, MinGW 13.1, CMake and Ninja into `C:\Qt`** (once per machine):
 
 ```powershell
-python -m pip install aqtinstall cmake ninja
+python -m pip install aqtinstall
 python -m aqt install-qt windows desktop 6.9.2 win64_mingw -O C:\Qt
 python -m aqt install-tool windows desktop tools_mingw1310 -O C:\Qt
+python -m aqt install-tool windows desktop tools_cmake -O C:\Qt
+python -m aqt install-tool windows desktop tools_ninja -O C:\Qt
 ```
 
-If either `aqt` download times out, run that line again with a different mirror:
+If a download times out, run the same lines with a different mirror:
 
 ```powershell
 python -m aqt install-qt windows desktop 6.9.2 win64_mingw -O C:\Qt -b https://mirrors.dotsrc.org/qt/
 python -m aqt install-tool windows desktop tools_mingw1310 -O C:\Qt -b https://mirrors.dotsrc.org/qt/
+python -m aqt install-tool windows desktop tools_cmake -O C:\Qt -b https://mirrors.dotsrc.org/qt/
+python -m aqt install-tool windows desktop tools_ninja -O C:\Qt -b https://mirrors.dotsrc.org/qt/
 ```
 
-**2. Set up the window** (in every new PowerShell window). This puts pip's CMake/Ninja, MinGW and
-Qt on `PATH`, and maps the folder to drive `K:` so that spaces in the path cannot break the build:
+**2. Set up the window** (in every new PowerShell window, from the `code` folder). This puts
+Qt's CMake, Ninja, MinGW and Qt itself on `PATH`, and maps the folder to drive `K:` so that spaces
+in the path cannot break the build (it skips the mapping if you are already on `K:`):
 
 ```powershell
-$pyScripts = python -c "import sysconfig, os; print(sysconfig.get_path('scripts') + ';' + sysconfig.get_path('scripts', os.name + '_user'))"
-$env:PATH = "$pyScripts;C:\Qt\Tools\mingw1310_64\bin;C:\Qt\6.9.2\mingw_64\bin;$env:PATH"
+$env:PATH = "C:\Qt\Tools\CMake_64\bin;C:\Qt\Tools\Ninja;C:\Qt\Tools\mingw1310_64\bin;C:\Qt\6.9.2\mingw_64\bin;$env:PATH"
 if ((Get-Location).Drive.Name -ne 'K') { subst K: /D 2>$null; subst K: "$PWD"; cd K:\ }
+cmake --version
 ```
 
-If Windows later says *"An Application Control policy has blocked this file"*, Smart App Control
-is blocking the unsigned pip CMake. Install the signed CMake, then open a new PowerShell window,
-`cd` to the `code` folder and run step 2 again:
-
-```powershell
-winget install Kitware.CMake
-```
-
-If it still blocks the compiler, use the Linux / WSL steps below (not affected by that policy).
+`cmake --version` should print a version from `C:\Qt\Tools\CMake_64`.
 
 **3. Build and start the GUI** (about 5–10 minutes):
 
@@ -103,6 +115,10 @@ cmake -S . -B build\test -G Ninja -DCMAKE_BUILD_TYPE=Debug `
 cmake --build build\test --target kites_test -j4
 .\build\test\test\kites_test.exe --gtest_filter="LnsInstructions.*:*LnsCbrtKernel*"
 ```
+
+**If Windows says "An Application Control policy has blocked this file"**: Smart App Control
+(on by default on some new Windows 11 installs) is blocking an unsigned program, usually the MinGW
+compiler. Use the Linux / WSL steps below instead; that policy does not apply inside WSL.
 
 ### Linux / WSL (command line, used for all benchmarks)
 

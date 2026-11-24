@@ -83,3 +83,113 @@ k,variant,input_set,kind,log_bits,exp_bits,instr_per_root,A_cycles_low,A_cycles_
 3,L0,uniform_bits,table_sweep,23,22,9.000,,,,,,,,,,,52.8320,not modelled: no CACTI value above 16 bits
 3,L1,uniform_bits,table_sweep,23,22,18.231,,,,,,,,,3,0.495117,100.0000,not modelled: no CACTI value above 16 bits
 3,L2,uniform_bits,table_sweep,23,22,24.510,,,,,,,,,1,0.490234,100.0000,not modelled: no CACTI value above 16 bits
+2,LDK,uniform_bits,kroot_table_sweep,6,6,2780.797,,4362.79,,,,,3.660,7.660,33466,,,integer BK at 11/11: 136.49 cycles; model only
+2,LDK,uniform_bits,kroot_table_sweep,7,7,786.613,,1232.08,,,,,3.705,7.705,8845,,,integer BK at 11/11: 136.49 cycles; model only
+2,LDK,uniform_bits,kroot_table_sweep,8,8,189.684,,286.70,,,,,3.750,7.750,2030,,,integer BK at 11/11: 136.49 cycles; model only
+2,LDK,uniform_bits,kroot_table_sweep,9,9,76.902,,121.35,,,,,3.795,7.795,713,,,integer BK at 11/11: 136.49 cycles; model only
+2,LDK,uniform_bits,kroot_table_sweep,10,10,39.965,,61.91,,,,,3.887,7.887,251,,,integer BK at 11/11: 136.49 cycles; checked against simulator
+2,LDK,uniform_bits,kroot_table_sweep,11,11,41.152,,63.79,,,,,4.000,8.000,261,,,integer BK at 11/11: 136.49 cycles; checked against simulator
+2,LDK,uniform_bits,kroot_table_sweep,12,12,40.227,,62.43,,,,,4.178,8.178,242,,,integer BK at 11/11: 136.49 cycles; model only
+2,LDK,uniform_bits,kroot_table_sweep,13,13,40.059,,62.54,,,,,4.424,8.424,238,,,integer BK at 11/11: 136.49 cycles; checked against simulator
+2,LDK,uniform_bits,kroot_table_sweep,14,14,40.012,,63.28,,,,,4.845,8.845,237,,,integer BK at 11/11: 136.49 cycles; model only
+2,LDK,uniform_bits,kroot_table_sweep,15,15,39.977,,64.49,,,,,5.482,9.482,237,,,integer BK at 11/11: 136.49 cycles; model only
+2,LDK,uniform_bits,kroot_table_sweep,16,16,39.988,,66.06,,,,,6.260,10.260,236,,,integer BK at 11/11: 136.49 cycles; model only
+2,LK,uniform_bits,kroot_table_sweep,6,6,2774.797,,4363.45,,,,,3.660,7.660,33466,,,integer BK at 11/11: 136.49 cycles; model only
+2,LK,uniform_bits,kroot_table_sweep,7,7,780.613,,1232.78,,,,,3.705,7.705,8845,,,integer BK at 11/11: 136.49 cycles; model only
+2,LK,uniform_bits,kroot_table_sweep,8,8,183.684,,287.45,,,,,3.750,7.750,2030,,,integer BK at 11/11: 136.49 cycles; model only
+2,LK,uniform_bits,kroot_table_sweep,9,9,70.902,,122.15,,,,,3.795,7.795,713,,,integer BK at 11/11: 136.49 cycles; model only
+2,LK,uniform_bits,kroot_table_sweep,10,10,33.965,,62.80,,,,,3.887,7.887,251,,,integer BK at 11/11: 136.49 cycles; checked against simulator
+2,LK,uniform_bits,kroot_table_sweep,11,11,35.152,,64.79,,,,,4.000,8.000,261,,,integer BK at 11/11: 136.49 cycles; checked against simulator
+2,LK,uniform_bits,kroot_table_sweep,12,12,34.227,,63.61,,,,,4.178,8.178,242,,,integer BK at 11/11: 136.49 cycles; model only
+2,LK,uniform_bits,kroot_table_sweep,13,13,34.059,,63.96,,,,,4.424,8.424,238,,,integer BK at 11/11: 136.49 cycles; checked against simulator
+2,LK,uniform_bits,kroot_table_sweep,14,14,34.012,,65.13,,,,,4.845,8.845,237,,,integer BK at 11/11: 136.49 cycles; model only
+2,LK,uniform_bits,kroot_table_sweep,15,15,33.977,,66.98,,,,,5.482,9.482,237,,,integer BK at 11/11: 136.49 cycles; model only
+2,LK,uniform_bits,kroot_table_sweep,16,16,33.988,,69.32,,,,,6.260,10.260,236,,,integer BK at 11/11: 136.49 cycles; model only
+3,LDK,uniform_bits,kroot_table_sweep,6,6,27.656,,46.07,,,,,3.660,7.660,21,,,integer BK at 11/11: 162.72 cycles; checked against simulator
+3,LDK,uniform_bits,kroot_table_sweep,7,7,25.055,,40.98,,,,,3.705,7.705,7,,,integer BK at 11/11: 162.72 cycles; model only
+3,LDK,uniform_bits,kroot_table_sweep,8,8,24.539,,40.09,,,,,3.750,7.750,3,,,integer BK at 11/11: 162.72 cycles; checked against simulator
+3,LDK,uniform_bits,kroot_table_sweep,9,9,24.527,,40.12,,,,,3.795,7.795,1,,,integer BK at 11/11: 162.72 cycles; model only
+3,LDK,uniform_bits,kroot_table_sweep,10,10,24.535,,40.31,,,,,3.887,7.887,1,,,integer BK at 11/11: 162.72 cycles; checked against simulator
+3,LDK,uniform_bits,kroot_table_sweep,11,11,24.551,,40.55,,,,,4.000,8.000,1,,,integer BK at 11/11: 162.72 cycles; checked against simulator
+3,LDK,uniform_bits,kroot_table_sweep,12,12,24.551,,40.91,,,,,4.178,8.178,1,,,integer BK at 11/11: 162.72 cycles; model only
+3,LDK,uniform_bits,kroot_table_sweep,13,13,24.547,,41.40,,,,,4.424,8.424,1,,,integer BK at 11/11: 162.72 cycles; checked against simulator
+3,LDK,uniform_bits,kroot_table_sweep,14,14,24.547,,42.24,,,,,4.845,8.845,1,,,integer BK at 11/11: 162.72 cycles; model only
+3,LDK,uniform_bits,kroot_table_sweep,15,15,24.547,,43.51,,,,,5.482,9.482,1,,,integer BK at 11/11: 162.72 cycles; model only
+3,LDK,uniform_bits,kroot_table_sweep,16,16,24.547,,45.07,,,,,6.260,10.260,1,,,integer BK at 11/11: 162.72 cycles; model only
+3,LK,uniform_bits,kroot_table_sweep,6,6,113.578,,229.87,,,,,3.660,7.660,527,,,integer BK at 11/11: 162.72 cycles; checked against simulator
+3,LK,uniform_bits,kroot_table_sweep,7,7,27.180,,57.12,,,,,3.705,7.705,61,,,integer BK at 11/11: 162.72 cycles; model only
+3,LK,uniform_bits,kroot_table_sweep,8,8,20.988,,44.85,,,,,3.750,7.750,23,,,integer BK at 11/11: 162.72 cycles; checked against simulator
+3,LK,uniform_bits,kroot_table_sweep,9,9,18.160,,39.28,,,,,3.795,7.795,6,,,integer BK at 11/11: 162.72 cycles; model only
+3,LK,uniform_bits,kroot_table_sweep,10,10,18.031,,38.94,,,,,3.887,7.887,2,,,integer BK at 11/11: 162.72 cycles; checked against simulator
+3,LK,uniform_bits,kroot_table_sweep,11,11,18.062,,39.33,,,,,4.000,8.000,3,,,integer BK at 11/11: 162.72 cycles; checked against simulator
+3,LK,uniform_bits,kroot_table_sweep,12,12,18.062,,39.86,,,,,4.178,8.178,3,,,integer BK at 11/11: 162.72 cycles; model only
+3,LK,uniform_bits,kroot_table_sweep,13,13,18.062,,40.60,,,,,4.424,8.424,3,,,integer BK at 11/11: 162.72 cycles; checked against simulator
+3,LK,uniform_bits,kroot_table_sweep,14,14,18.062,,41.86,,,,,4.845,8.845,3,,,integer BK at 11/11: 162.72 cycles; model only
+3,LK,uniform_bits,kroot_table_sweep,15,15,18.062,,43.77,,,,,5.482,9.482,3,,,integer BK at 11/11: 162.72 cycles; model only
+3,LK,uniform_bits,kroot_table_sweep,16,16,18.062,,46.11,,,,,6.260,10.260,3,,,integer BK at 11/11: 162.72 cycles; model only
+4,LDK,uniform_bits,kroot_table_sweep,6,6,25.523,,42.87,,,,,3.660,7.660,2,,,integer BK at 11/11: 166.81 cycles; checked against simulator
+4,LDK,uniform_bits,kroot_table_sweep,7,7,25.516,,42.93,,,,,3.705,7.705,1,,,integer BK at 11/11: 166.81 cycles; model only
+4,LDK,uniform_bits,kroot_table_sweep,8,8,25.520,,43.02,,,,,3.750,7.750,1,,,integer BK at 11/11: 166.81 cycles; checked against simulator
+4,LDK,uniform_bits,kroot_table_sweep,9,9,25.523,,43.11,,,,,3.795,7.795,1,,,integer BK at 11/11: 166.81 cycles; model only
+4,LDK,uniform_bits,kroot_table_sweep,10,10,25.523,,43.30,,,,,3.887,7.887,1,,,integer BK at 11/11: 166.81 cycles; checked against simulator
+4,LDK,uniform_bits,kroot_table_sweep,11,11,25.523,,43.52,,,,,4.000,8.000,1,,,integer BK at 11/11: 166.81 cycles; checked against simulator
+4,LDK,uniform_bits,kroot_table_sweep,12,12,25.523,,43.88,,,,,4.178,8.178,1,,,integer BK at 11/11: 166.81 cycles; model only
+4,LDK,uniform_bits,kroot_table_sweep,13,13,25.523,,44.37,,,,,4.424,8.424,1,,,integer BK at 11/11: 166.81 cycles; checked against simulator
+4,LDK,uniform_bits,kroot_table_sweep,14,14,25.523,,45.21,,,,,4.845,8.845,1,,,integer BK at 11/11: 166.81 cycles; model only
+4,LDK,uniform_bits,kroot_table_sweep,15,15,25.523,,46.49,,,,,5.482,9.482,1,,,integer BK at 11/11: 166.81 cycles; model only
+4,LDK,uniform_bits,kroot_table_sweep,16,16,25.523,,48.04,,,,,6.260,10.260,1,,,integer BK at 11/11: 166.81 cycles; model only
+4,LK,uniform_bits,kroot_table_sweep,6,6,19.523,,43.53,,,,,3.660,7.660,2,,,integer BK at 11/11: 166.81 cycles; checked against simulator
+4,LK,uniform_bits,kroot_table_sweep,7,7,19.516,,43.63,,,,,3.705,7.705,1,,,integer BK at 11/11: 166.81 cycles; model only
+4,LK,uniform_bits,kroot_table_sweep,8,8,19.520,,43.77,,,,,3.750,7.750,1,,,integer BK at 11/11: 166.81 cycles; checked against simulator
+4,LK,uniform_bits,kroot_table_sweep,9,9,19.523,,43.91,,,,,3.795,7.795,1,,,integer BK at 11/11: 166.81 cycles; model only
+4,LK,uniform_bits,kroot_table_sweep,10,10,19.523,,44.19,,,,,3.887,7.887,1,,,integer BK at 11/11: 166.81 cycles; checked against simulator
+4,LK,uniform_bits,kroot_table_sweep,11,11,19.523,,44.52,,,,,4.000,8.000,1,,,integer BK at 11/11: 166.81 cycles; checked against simulator
+4,LK,uniform_bits,kroot_table_sweep,12,12,19.523,,45.06,,,,,4.178,8.178,1,,,integer BK at 11/11: 166.81 cycles; model only
+4,LK,uniform_bits,kroot_table_sweep,13,13,19.523,,45.80,,,,,4.424,8.424,1,,,integer BK at 11/11: 166.81 cycles; checked against simulator
+4,LK,uniform_bits,kroot_table_sweep,14,14,19.523,,47.06,,,,,4.845,8.845,1,,,integer BK at 11/11: 166.81 cycles; model only
+4,LK,uniform_bits,kroot_table_sweep,15,15,19.523,,48.97,,,,,5.482,9.482,1,,,integer BK at 11/11: 166.81 cycles; model only
+4,LK,uniform_bits,kroot_table_sweep,16,16,19.523,,51.30,,,,,6.260,10.260,1,,,integer BK at 11/11: 166.81 cycles; model only
+5,LDK,uniform_bits,kroot_table_sweep,6,6,28.492,,51.81,,,,,3.660,7.660,1,,,integer BK at 11/11: 186.32 cycles; checked against simulator
+5,LDK,uniform_bits,kroot_table_sweep,7,7,28.492,,51.90,,,,,3.705,7.705,1,,,integer BK at 11/11: 186.32 cycles; model only
+5,LDK,uniform_bits,kroot_table_sweep,8,8,28.492,,51.99,,,,,3.750,7.750,1,,,integer BK at 11/11: 186.32 cycles; checked against simulator
+5,LDK,uniform_bits,kroot_table_sweep,9,9,28.496,,52.09,,,,,3.795,7.795,1,,,integer BK at 11/11: 186.32 cycles; model only
+5,LDK,uniform_bits,kroot_table_sweep,10,10,28.496,,52.27,,,,,3.887,7.887,1,,,integer BK at 11/11: 186.32 cycles; checked against simulator
+5,LDK,uniform_bits,kroot_table_sweep,11,11,28.496,,52.50,,,,,4.000,8.000,1,,,integer BK at 11/11: 186.32 cycles; checked against simulator
+5,LDK,uniform_bits,kroot_table_sweep,12,12,28.496,,52.85,,,,,4.178,8.178,1,,,integer BK at 11/11: 186.32 cycles; model only
+5,LDK,uniform_bits,kroot_table_sweep,13,13,28.496,,53.35,,,,,4.424,8.424,1,,,integer BK at 11/11: 186.32 cycles; checked against simulator
+5,LDK,uniform_bits,kroot_table_sweep,14,14,28.496,,54.19,,,,,4.845,8.845,1,,,integer BK at 11/11: 186.32 cycles; model only
+5,LDK,uniform_bits,kroot_table_sweep,15,15,28.496,,55.46,,,,,5.482,9.482,1,,,integer BK at 11/11: 186.32 cycles; model only
+5,LDK,uniform_bits,kroot_table_sweep,16,16,28.496,,57.02,,,,,6.260,10.260,1,,,integer BK at 11/11: 186.32 cycles; model only
+5,LK,uniform_bits,kroot_table_sweep,6,6,21.445,,49.46,,,,,3.660,7.660,2,,,integer BK at 11/11: 186.32 cycles; checked against simulator
+5,LK,uniform_bits,kroot_table_sweep,7,7,21.477,,49.59,,,,,3.705,7.705,1,,,integer BK at 11/11: 186.32 cycles; model only
+5,LK,uniform_bits,kroot_table_sweep,8,8,21.488,,49.74,,,,,3.750,7.750,1,,,integer BK at 11/11: 186.32 cycles; checked against simulator
+5,LK,uniform_bits,kroot_table_sweep,9,9,21.492,,49.88,,,,,3.795,7.795,1,,,integer BK at 11/11: 186.32 cycles; model only
+5,LK,uniform_bits,kroot_table_sweep,10,10,21.492,,50.15,,,,,3.887,7.887,1,,,integer BK at 11/11: 186.32 cycles; checked against simulator
+5,LK,uniform_bits,kroot_table_sweep,11,11,21.492,,50.49,,,,,4.000,8.000,1,,,integer BK at 11/11: 186.32 cycles; checked against simulator
+5,LK,uniform_bits,kroot_table_sweep,12,12,21.492,,51.02,,,,,4.178,8.178,1,,,integer BK at 11/11: 186.32 cycles; model only
+5,LK,uniform_bits,kroot_table_sweep,13,13,21.492,,51.77,,,,,4.424,8.424,1,,,integer BK at 11/11: 186.32 cycles; checked against simulator
+5,LK,uniform_bits,kroot_table_sweep,14,14,21.492,,53.03,,,,,4.845,8.845,1,,,integer BK at 11/11: 186.32 cycles; model only
+5,LK,uniform_bits,kroot_table_sweep,15,15,21.492,,54.94,,,,,5.482,9.482,1,,,integer BK at 11/11: 186.32 cycles; model only
+5,LK,uniform_bits,kroot_table_sweep,16,16,21.492,,57.27,,,,,6.260,10.260,1,,,integer BK at 11/11: 186.32 cycles; model only
+6,LDK,uniform_bits,kroot_table_sweep,6,6,30.488,,57.81,,,,,3.660,7.660,1,,,integer BK at 11/11: 209.83 cycles; checked against simulator
+6,LDK,uniform_bits,kroot_table_sweep,7,7,30.488,,57.90,,,,,3.705,7.705,1,,,integer BK at 11/11: 209.83 cycles; model only
+6,LDK,uniform_bits,kroot_table_sweep,8,8,30.488,,57.99,,,,,3.750,7.750,1,,,integer BK at 11/11: 209.83 cycles; checked against simulator
+6,LDK,uniform_bits,kroot_table_sweep,9,9,30.488,,58.08,,,,,3.795,7.795,1,,,integer BK at 11/11: 209.83 cycles; model only
+6,LDK,uniform_bits,kroot_table_sweep,10,10,30.488,,58.26,,,,,3.887,7.887,1,,,integer BK at 11/11: 209.83 cycles; checked against simulator
+6,LDK,uniform_bits,kroot_table_sweep,11,11,30.488,,58.49,,,,,4.000,8.000,1,,,integer BK at 11/11: 209.83 cycles; checked against simulator
+6,LDK,uniform_bits,kroot_table_sweep,12,12,30.488,,58.84,,,,,4.178,8.178,1,,,integer BK at 11/11: 209.83 cycles; model only
+6,LDK,uniform_bits,kroot_table_sweep,13,13,30.488,,59.34,,,,,4.424,8.424,1,,,integer BK at 11/11: 209.83 cycles; checked against simulator
+6,LDK,uniform_bits,kroot_table_sweep,14,14,30.488,,60.18,,,,,4.845,8.845,1,,,integer BK at 11/11: 209.83 cycles; model only
+6,LDK,uniform_bits,kroot_table_sweep,15,15,30.488,,61.45,,,,,5.482,9.482,1,,,integer BK at 11/11: 209.83 cycles; model only
+6,LDK,uniform_bits,kroot_table_sweep,16,16,30.488,,63.01,,,,,6.260,10.260,1,,,integer BK at 11/11: 209.83 cycles; model only
+6,LK,uniform_bits,kroot_table_sweep,6,6,23.480,,55.46,,,,,3.660,7.660,1,,,integer BK at 11/11: 209.83 cycles; checked against simulator
+6,LK,uniform_bits,kroot_table_sweep,7,7,23.488,,55.60,,,,,3.705,7.705,1,,,integer BK at 11/11: 209.83 cycles; model only
+6,LK,uniform_bits,kroot_table_sweep,8,8,23.488,,55.74,,,,,3.750,7.750,1,,,integer BK at 11/11: 209.83 cycles; checked against simulator
+6,LK,uniform_bits,kroot_table_sweep,9,9,23.488,,55.87,,,,,3.795,7.795,1,,,integer BK at 11/11: 209.83 cycles; model only
+6,LK,uniform_bits,kroot_table_sweep,10,10,23.488,,56.15,,,,,3.887,7.887,1,,,integer BK at 11/11: 209.83 cycles; checked against simulator
+6,LK,uniform_bits,kroot_table_sweep,11,11,23.488,,56.49,,,,,4.000,8.000,1,,,integer BK at 11/11: 209.83 cycles; checked against simulator
+6,LK,uniform_bits,kroot_table_sweep,12,12,23.488,,57.02,,,,,4.178,8.178,1,,,integer BK at 11/11: 209.83 cycles; model only
+6,LK,uniform_bits,kroot_table_sweep,13,13,23.488,,57.76,,,,,4.424,8.424,1,,,integer BK at 11/11: 209.83 cycles; checked against simulator
+6,LK,uniform_bits,kroot_table_sweep,14,14,23.488,,59.02,,,,,4.845,8.845,1,,,integer BK at 11/11: 209.83 cycles; model only
+6,LK,uniform_bits,kroot_table_sweep,15,15,23.488,,60.93,,,,,5.482,9.482,1,,,integer BK at 11/11: 209.83 cycles; model only
+6,LK,uniform_bits,kroot_table_sweep,16,16,23.488,,63.27,,,,,6.260,10.260,1,,,integer BK at 11/11: 209.83 cycles; model only

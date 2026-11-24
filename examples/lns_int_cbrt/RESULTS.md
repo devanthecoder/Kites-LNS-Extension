@@ -863,6 +863,23 @@ Unit and Its Performance Compared to Floating-Point", Proc. 14th IEEE Symposium 
 Arithmetic (ARITH-14), 1999 (`docs/Coleman1999_32bit_LNS_unit_ARITH14.pdf` on branch Devadath).
 CACTI 7, <https://github.com/HewlettPackard/cacti>, commit `1ffd8df`.
 
+### I.H Other roots: converter table size (CACTI-scaled, ESTIMATE)
+
+The same CACTI scaling as I.G, applied to the k-th-root variants of section H (LK = `lpow`, LDK = log ÷ k), set `uniform_bits`, converter tables 6..16 bits (log = exp). Instruction counts come from the static model with the C++ model's fix-up candidates at each table size, checked against the simulator rows of `config_sweep.csv` wherever the simulator ran that size (6, 8, 10, 11 and 13 bits). Rows `kind = kroot_table_sweep` in `results/latency_estimates.csv`. Estimated cycles per root (scenario A); the integer baseline BK does not use the tables:
+
+| k | BK (integer) | LK at 6 bits | LK at 8 | LK at 10 | LK at 11 (default) | LK at 16 | best LNS (variant, bits) |
+|---|---:|---:|---:|---:|---:|---:|---|
+| 2 | 136.5 | 4363 | 287.5 | 62.8 | 64.8 | 69.3 | 61.9 (LDK, 10) |
+| 3 | 162.7 | 229.9 | 44.9 | 38.9 | 39.3 | 46.1 | 38.9 (LK, 10) |
+| 4 | 166.8 | 43.5 | 43.8 | 44.2 | 44.5 | 51.3 | 42.9 (LDK, 6) |
+| 5 | 186.3 | 49.5 | 49.7 | 50.1 | 50.5 | 57.3 | 49.5 (LK, 6) |
+| 6 | 209.8 | 55.5 | 55.7 | 56.1 | 56.5 | 63.3 | 55.5 (LK, 6) |
+
+- **k ≥ 4: the smallest tables are the fastest.** Instruction counts are the same at every table size (at most 1 fix-up step even at 6 bits), so the only effect of a bigger table is a slower `lpow` / convert. 6-bit tables (1 KiB) are both exact and cheapest.
+- **k = 3 is the in-between case:** below about 9 bits the fix-up steps explode (6 bits: 229.9 cycles, worse than integer); from 9–10 bits the cost is flat and then rises slowly with table size. Best: 10 bits.
+- **k = 2 needs at least 9–10 bits** and even then keeps a worst case of about 240 fix-up steps on 64-bit inputs (the 22-bit log fraction cannot resolve a 32-bit root, section H). On `uniform_bits` it still beats integer Newton on average from 9 bits up; on `uniform_u64` it does not (section H).
+- Tables above 16 bits are not modelled (no CACTI value).
+
 ## What must not be claimed
 
 - **Simulator wall-clock time is not an LNS-vs-integer comparison.** KITES runs integer/FP ops

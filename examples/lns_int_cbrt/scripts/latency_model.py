@@ -236,6 +236,7 @@ def main():
     for set_name in ("uniform_u64", "width32"):
         kroot_block(set_name, rows, levels)
     table_block(rows, k3)
+    kroot_table_block(rows)
     out = os.path.join(RESD, "latency_estimates.csv")
     with open(out, "w", newline="") as f:
         fields = list(rows[0].keys()) + [c for c in rows[-1] if c not in rows[0]]
@@ -311,6 +312,56 @@ def table_block(rows, k3):
                       f"{lat_a['lns_pow']:6.3f} {ca:8.2f} {r['fixup_steps_max']:>6s} "
                       f"{float(r['pct_exact']):7.2f}")
             rows.append(row)
+
+
+def kroot_table_block(rows, set_name="uniform_bits"):
+    """k = 2..6 LNS variants (LK, LDK) at converter tables 6..16 bits (log = exp): CACTI-scaled
+    cycles per root, from the static model with the C++ model's fix-up candidates at each table
+    size (checked against config_sweep.csv where the simulator ran that size)."""
+    import sweep_configs as s
+    sim = {}
+    with open(os.path.join(RESD, "config_sweep.csv")) as f:
+        for r in csv.DictReader(f):
+            if r["input_set"] == set_name and r["log_bits"]:
+                sim[(int(r["k"]), r["variant"], int(r["log_bits"]), int(r["exp_bits"]))] = r
+    progs = [p for p in s.all_kprogs() if p.set_name == set_name and p.variant in ("BK", "LK", "LDK")]
+    base = kroot_mixes(set_name)
+    print(f"\nk = 2..6, {set_name}, converter table size (log = exp), CACTI-scaled convert / lpow:")
+    print(f"{'k':>2s} {'var':4s} {'bits':>4s} {'instr':>8s} {'cycles':>9s} {'BK cycles':>9s} {'maxfix':>7s}")
+    for p in sorted(progs, key=lambda q: (q.k, q.variant)):
+        if p.variant == "BK":
+            continue
+        bk = cost(base[(p.k, "BK")], SCEN_A, 1)
+        path = os.path.join(PROG, p.rel)
+        if not os.path.exists(path):
+            s.write_programs([p])
+        q = s.KProg(p.variant, p.k, p.set_name, p.values, count=False)
+        for bits in range(6, 17):
+            env = {"LNS_LOG_LUT_BITS": str(bits), "LNS_EXP_LUT_BITS": str(bits)}
+            evals = s.model_keval(p, path, env)
+            prof = q.static_profile([m[1] for m in evals])
+            mix = {c: (prof["classes"].get(c, 0) - prof["setup_classes"].get(c, 0)) / q.n
+                   for c in prof["classes"]}
+            mix = {c: v for c, v in mix.items() if v}
+            n_instr = sum(mix.values())
+            ref = sim.get((p.k, p.variant, bits, bits))
+            if ref is not None and abs(n_instr - float(ref["instr_per_root_uninstrumented"])) > 5e-3:
+                raise SystemExit(f"k={p.k} {p.variant} {bits}: static model {n_instr:.4f} != "
+                                 f"config_sweep.csv {ref['instr_per_root_uninstrumented']}")
+            lat = lns_latencies(bits, bits, "A")
+            ca = cost(mix, SCEN_A, 1, lat)
+            steps = max(abs(m[1] - m[0]) for m in evals)
+            print(f"{p.k:2d} {p.variant:4s} {bits:4d} {n_instr:8.2f} {ca:9.2f} {bk:9.2f} {steps:7d}")
+            rows.append({"k": p.k, "variant": p.variant, "input_set": set_name,
+                         "kind": "kroot_table_sweep", "log_bits": bits, "exp_bits": bits,
+                         "instr_per_root": f"{n_instr:.3f}", "A_cycles_low": "",
+                         "A_cycles_fixed": f"{ca:.2f}", "A_cycles_high": "", "B_ns_low": "",
+                         "B_ns_fixed": "", "B_ns_high": "",
+                         "lns_convert_cycles": f"{lat['lns_convert']:.3f}",
+                         "lns_pow_cycles": f"{lat['lns_pow']:.3f}", "fixup_steps_max": steps,
+                         "fixup_steps_mean": "", "pct_exact": "",
+                         "note": f"integer BK at 11/11: {bk:.2f} cycles; "
+                                 + ("checked against simulator" if ref is not None else "model only")})
 
 
 def kroot_block(set_name, rows, levels):

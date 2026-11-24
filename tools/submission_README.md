@@ -40,9 +40,16 @@ the simulator core links Qt.
 
 ### Windows (GUI, PowerShell)
 
-Qt 6.9.2 `win64_mingw` and its MinGW 13.1 toolchain, for example installed with
-`python -m aqt install-qt windows desktop 6.9.2 win64_mingw -O C:\Qt` and
-`python -m aqt install-tool windows desktop tools_mingw1310 -O C:\Qt`; CMake and Ninja on `PATH`.
+Needs Python 3. Install Qt 6.9.2 `win64_mingw`, its MinGW 13.1 toolchain, CMake and Ninja:
+
+```powershell
+python -m pip install aqtinstall cmake ninja
+python -m aqt install-qt windows desktop 6.9.2 win64_mingw -O C:\Qt
+python -m aqt install-tool windows desktop tools_mingw1310 -O C:\Qt
+```
+
+If a download times out, add `-b https://mirrors.dotsrc.org/qt/` to the two `aqt` lines. If
+`cmake` is then not found, add pip's `Scripts` folder (shown in pip's warning) to `PATH`.
 If the folder path contains spaces, map it to a drive letter first (`subst K: <path-to-code>`,
 then `cd K:\`).
 

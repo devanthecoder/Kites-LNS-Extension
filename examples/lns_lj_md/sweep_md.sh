@@ -147,7 +147,7 @@ while ((${#pending[@]} > 0 || running > 0)); do
             need=$((MEM_BASE_MB + ${line##* } * MEM_PER_STEP_KB / 1024))
             if ((used + need <= MEM_BUDGET_MB || running == 0)); then
                 # shellcheck disable=SC2086
-                "$0" --one $line &
+                bash "$0" --one $line &
                 job_mem[$!]=$need
                 used=$((used + need)) running=$((running + 1)) started=1
                 unset "pending[$idx]"

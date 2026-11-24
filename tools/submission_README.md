@@ -61,12 +61,15 @@ view. `examples/lns_lj/lj_lns.s` is a ready program to open and run.
 
 ### Linux / WSL (command line, used for all benchmarks)
 
+Always pass `-DTEST_DIR=test` (as below): without it, the upstream `CMakeLists.txt` searches the
+whole disk for test files and configuring takes very long.
+
 Ubuntu packages: `build-essential cmake ninja-build python3 libgl1-mesa-dev libxkbcommon-dev`.
 Qt: `pip install aqtinstall && python3 -m aqt install-qt linux desktop 6.9.2 linux_gcc_64 -O ~/Qt`.
 
 ```bash
 cmake -S . -B ~/kites-bench -G Ninja -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_PREFIX_PATH=$HOME/Qt/6.9.2/gcc_64 -DDISABLE_GUI=ON
+  -DCMAKE_PREFIX_PATH=$HOME/Qt/6.9.2/gcc_64 -DDISABLE_GUI=ON -DTEST_DIR=test
 cmake --build ~/kites-bench --target kites_cli -j4
 export KITES_CLI=~/kites-bench/kites-cli
 ```
@@ -79,7 +82,7 @@ needed; on Windows the tests build as they are.
 ```bash
 mkdir -p ~/kites-shim && touch ~/kites-shim/windows.h
 cmake -S . -B ~/kites-build -G Ninja -DCMAKE_BUILD_TYPE=Debug \
-  -DCMAKE_PREFIX_PATH=$HOME/Qt/6.9.2/gcc_64 -DENABLE_TESTS=ON -DDISABLE_GUI=ON \
+  -DCMAKE_PREFIX_PATH=$HOME/Qt/6.9.2/gcc_64 -DENABLE_TESTS=ON -DDISABLE_GUI=ON -DTEST_DIR=test \
   -DCMAKE_CXX_FLAGS="-isystem $HOME/kites-shim"
 cmake --build ~/kites-build --target kites_test -j4
 ~/kites-build/test/kites_test --gtest_filter='LnsInstructions.*:*LnsCbrtKernel*'

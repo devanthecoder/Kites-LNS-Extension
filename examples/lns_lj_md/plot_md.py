@@ -20,6 +20,9 @@ methods and performance benefits", Computers and Electrical Engineering 87 (2020
   sub 3 (4 when the range shifter is used); LNS multiply/divide 1.
   Section 4.2: range shifter used in half of all subtractions, so LNS sub averages 3.5.
   Table 1: 32-bit fixed-point multiply 32 ns at the ELM's 8 ns cycle = 4 cycles (lpown).
+  Those add/sub cycles belong to a table of about 2048 entries (Coleman & Chester 1999); our
+  4096-entry default is charged the CACTI-scaled cycles from table_latency.py
+  (results/md_table_latency.csv), which must be run first.
 Not in the paper (assumed): CORDIC add/sub 106 cycles (our implementation: 2 passes of 51
 iterations, one per cycle, plus normalisation and scaling) or 55 (sized for 22 fraction bits);
 conversions 4; loads, stores, integer and branch instructions 1 for both formats.
@@ -66,9 +69,14 @@ def category(m):
     return "integer, branch, other"
 
 
+# ladd / lsub cycles of the default 4096-entry table; main() reads them from md_table_latency.csv
+# (table_latency.py: the paper's 3 / 3.5 cycles belong to a 2048-entry table, scaled with CACTI).
+ADDSUB = {}
+
+
 def latency(m, cordic):
-    table = {"fadd.s": 4, "fsub.s": 4, "fmul.s": 4, "fdiv.s": 30, "lmul": 1, "ladd": 3,
-             "lsub": 3.5, "lpown": 4, "laddc": cordic, "lsubc": cordic}
+    table = {"fadd.s": 4, "fsub.s": 4, "fmul.s": 4, "fdiv.s": 30, "lmul": 1, "lpown": 4,
+             "laddc": cordic, "lsubc": cordic, **ADDSUB}
     if m.startswith("fcvt"):
         return 4
     return table.get(m, 1)
@@ -340,8 +348,9 @@ def plot_breakeven(counts):
     ax.axvline(even, color=MUTED, linewidth=0.8, linestyle=":")
     ax.text(even * 1.08, fp / 1e6 * 0.55, "break-even\n%.1f cycles" % even, fontsize=6.5,
             color=INK2)
-    for L, name, mk in ((3.25, "table", "D"), (55, "CORDIC 55", "^"), (106, "CORDIC 106", "^")):
-        yv = (rest + addsub * L) / 1e6  # table: average of add 3 and sub 3.5
+    table = (lns["ladd"] * ADDSUB["ladd"] + lns["lsub"] * ADDSUB["lsub"]) / addsub
+    for L, name, mk in ((table, "table (4K)", "D"), (55, "CORDIC 55", "^"), (106, "CORDIC 106", "^")):
+        yv = (rest + addsub * L) / 1e6
         ax.plot([L], [yv], marker=mk, color=INK, markersize=5, linestyle="none")
         ax.annotate(name, (L, yv), textcoords="offset points", xytext=(5, -10) if L < 4 else (-4, 6),
                     fontsize=6.5, ha="left" if L < 4 else "right", color=INK2)
@@ -435,10 +444,6 @@ def plot_averages(avg):
 
 def table_tradeoff(counts, runs):
     """Estimated speed-up and accuracy per add/sub table size, with CACTI-scaled add/sub latency."""
-    path = os.path.join(RES, "md_table_latency.csv")
-    if not os.path.exists(path):
-        print("skipped md_table_tradeoff: run table_latency.py first")
-        return
     lat = {int(r["entries"]): r for r in read("md_table_latency.csv") if r["table"] == "addsub"}
     lns = counts["lns_alu4096"]  # the same program runs at every table size
     rest = sum(n * latency(m, 0) for m, n in lns.items() if m not in ("ladd", "lsub"))
@@ -516,6 +521,12 @@ def plot_software_time():
 
 
 def main():
+    path = os.path.join(RES, "md_table_latency.csv")
+    if not os.path.exists(path):
+        raise SystemExit("missing results/md_table_latency.csv: run table_latency.py first")
+    row = next(r for r in read("md_table_latency.csv")
+               if r["table"] == "addsub" and r["entries"] == "4096")
+    ADDSUB.update(ladd=float(row["ladd_cycles"]), lsub=float(row["lsub_cycles"]))
     os.makedirs(PLOTS, exist_ok=True)
     style()
     runs = read("md_runs.csv")

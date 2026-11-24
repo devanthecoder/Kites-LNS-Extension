@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
 """Estimated LNS add/sub latency for each table size, from CACTI, for the MD cycle estimate.
 
-The cycle estimate (plot_md.py) charges ladd 3 and lsub 3.5 cycles at every table size, from
-Parhami 2020, Table 3. A bigger table is slower to read, so this script scales the table-read
-part of that latency with the access time CACTI estimates for each size:
+The paper latencies (Parhami 2020, Table 3: LNS add 3 cycles, subtract 3.5 on average) belong to
+one particular table. A bigger table is slower to read, so this script scales the table-read part
+of that latency with the access time CACTI estimates for each size:
 
   * Table size: entries x 8 bytes (a value and a slope, 32 bits each, for linear interpolation).
   * CACTI 7 (https://github.com/HewlettPackard/cacti): a single-ported RAM array of that size,
     45 nm, 8-byte reads, optimised for access time. A ROM would be somewhat smaller and faster;
     only the ratio between sizes is used.
-  * Anchor: the default 4096-entry table has the paper's latency (add 3, sub 3.5 cycles).
+  * Anchor: the paper's latencies belong to the 2048-entry table. The unit they come from
+    (Coleman & Chester, "A 32-Bit Logarithmic Arithmetic Unit and Its Performance Compared to
+    Floating-Point", ARITH-14, 1999, section 2.6; docs/Coleman1999_32bit_LNS_unit_ARITH14.pdf)
+    uses 256-word F, D and E tables per segment over 6 segments (1,536 interpolation intervals)
+    plus a 1,024-word P table: 108,032 bits, about 13 KB, for addition. That lies between our
+    1024-entry (8 KB) and 2048-entry (16 KB) tables; the nearer power of two is 2048.
   * Only the table read scales. In Parhami 2020 (section 4.2, Table 1) the 28 ns LNS add includes
     an assumed 5 ns ROM access, so the read is 5/28 of the add and the rest (comparator, adders)
     stays fixed:
-        cycles(size) = paper cycles x (1 - f + f x access(size) / access(4096)),  f = 5/28
+        cycles(size) = paper cycles x (1 - f + f x access(size) / access(2048)),  f = 5/28
 The conversion tables are sized the same way (2^k entries, two tables) and their access times
 are reported, but not turned into cycles: the paper has no conversion latency to anchor to.
 
@@ -33,7 +38,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 RES = os.path.join(HERE, "results")
 CACTI = os.environ.get("CACTI", os.path.expanduser("~/cacti/cacti"))
 ENTRY_BYTES = 8
-ANCHOR_ENTRIES = 4096
+ANCHOR_ENTRIES = 2048  # the paper's table size (Coleman & Chester 1999), see above
 ROM_FRACTION = 5.0 / 28.0  # Parhami 2020, section 4.2: 5 ns ROM access in a 28 ns add
 PAPER_ADD, PAPER_SUB = 3.0, 3.5
 ALU_ENTRIES = [256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536]

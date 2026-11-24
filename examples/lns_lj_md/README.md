@@ -115,7 +115,7 @@ both for dt = 0.005 and 200 steps:
   | `fadd.s`, `fsub.s`, `fmul.s` | 4 | Table 3 (TMS320C6711) |
   | `fdiv.s` | 30 | Table 3 (TMS320C6711) |
   | `lmul` | 1 | Table 3 (ELM) |
-  | `ladd` / `lsub` | 3 / 3.5 | Table 3 (ELM); subtraction is 4 cycles when the range shifter is used, taken as half of all subtractions (section 4.2) |
+  | `ladd` / `lsub` | 3.13 / 3.66 | Table 3 (ELM): 3 / 3.5 (subtraction is 4 cycles when the range shifter is used, taken as half of all subtractions, section 4.2). Those belong to a table of about 2048 entries; our 4096-entry default is scaled with CACTI (below). |
   | `lpown` | 4 | Table 1: 32-bit fixed-point multiply, 32 ns at the ELM's 8 ns cycle |
   | `laddc` / `lsubc` | 106 or 55 | Assumed: 2 CORDIC passes of 51 iterations at one per cycle, or passes sized for 22 fraction bits |
   | conversions | 4 | Assumed |
@@ -129,8 +129,12 @@ both for dt = 0.005 and 200 steps:
   (a standard memory model) for each table size: entries × 8 bytes (value and slope), 45 nm.
   Only the table read scales: in the paper, the 28 ns LNS add includes a 5 ns ROM access
   (section 4.2), so add/sub latency = paper latency × (23/28 + 5/28 × access(size) /
-  access(4096 entries)), anchored so the default 4096-entry table keeps the paper's 3 / 3.5
-  cycles. `plot_md.py` combines this with each size's accuracy into `md_table_tradeoff.csv`.
+  access(2048 entries)). The anchor is the size of the unit the paper's latencies come from
+  (Coleman & Chester, ARITH-14, 1999, section 2.6, `docs/Coleman1999_32bit_LNS_unit_ARITH14.pdf`):
+  its addition tables hold 1,536 interpolation intervals plus correction tables, about 13 KB,
+  between our 1024- (8 KB) and 2048-entry (16 KB) tables. `plot_md.py` uses the scaled cycles of
+  the default table in the cycle estimate, and combines every size with its accuracy into
+  `md_table_tradeoff.csv`.
 - **Measured software time (host):** `time_md.sh` times the C++ model running the whole simulation
   many times on one CPU core and reports the median. FP runs on the host's FP hardware and LNS
   on the simulator's C++ arithmetic, so this is the cost of LNS done in software.

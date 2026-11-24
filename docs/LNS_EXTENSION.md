@@ -131,7 +131,8 @@ the defaults unchanged.
 - `tools/` (plain C++, no Qt; build lines in each file's header):
   - Checks: `lns_conversion_check.cpp`, `lns_alu_check.cpp` (accuracy and table-size sweeps),
     `lns_pow_check.cpp` (`lpow` accuracy vs `2^f` table size, `lpown` exactness),
-    `lns_lj_accuracy.cpp` (Lennard-Jones accuracy model).
+    `lns_lj_accuracy.cpp` (Lennard-Jones energy model), `lns_lj_md_model.cpp` (Lennard-Jones
+    molecular-dynamics model and FP64 reference).
   - Microbenchmarks, which call the library directly on random inputs spread over each table:
     `lns_table_sweep.cpp` (`ladd` / `lsub` error and time vs correction samples, conversions
     and `lpow` vs LUT bits), `lns_conversion_sweep.cpp` (relative error and time of the FP32
@@ -151,6 +152,36 @@ the defaults unchanged.
   `l10` word from `kites-cli` bit for bit.
 - `sweep.sh` (bash, WSL/Linux) times `kites-cli --vm rvss` over the table sizes and writes
   `results.csv`. It measures simulator (host) time, not hardware latency.
+- See `examples/lns_lj/README.md` for how to run it.
+
+## Lennard-Jones molecular dynamics
+
+`examples/lns_lj_md/` runs a full molecular-dynamics simulation of the same 27 atoms (forces and
+velocity-Verlet time integration, energy and positions logged every 5 steps) in FP32, LNS with
+table add/sub and LNS with CORDIC add/sub. Each is compared against an FP64 reference computed in
+C++.
+
+- `gen_md.py` writes `md_fp32.s`, `md_lns.s` and `md_lns_cordic.s` for any time step and step
+  count. The LNS force kernel uses `lpown` for `r2^-1` and `r2^-3`.
+- `tools/lns_lj_md_model.cpp` runs the same simulation in C++: the FP64 reference, and FP32 / LNS
+  runs that match the simulator's logged memory bit for bit. `--time N` measures its host run
+  time.
+- `sweep_md.sh` runs 234 simulator runs: 26 configurations (FP32; LNS with 256-64K add/sub
+  entries and 6-23 conversion-table bits; CORDIC with 6-13 conversion bits) times 9
+  (time step, step count) pairs, at fixed step count and at fixed simulated time. All 234 are
+  bit-exact with the model.
+- `plot_md.py` draws the plots and computes an estimated cycle count: the simulator's instruction
+  counts times per-instruction latencies from Parhami (2020), `docs/LNSResearchPaper.pdf`.
+  `time_md.sh` measures the host software run time.
+- Main results (dt 0.005, 200 steps):
+  - Energy error vs FP64: FP32 1.1e-6; LNS with 4096 add/sub entries 4.2e-5 (mostly present
+    from step 0); 16K+ entries, or CORDIC with 8+ conversion bits, 1.4e-6 to
+    3.7e-6. All variants stay stable.
+  - LNS executes 2.0% fewer instructions than FP32 and no division.
+  - Estimated cycles: LNS with table add/sub is 1.85x faster than FP32 at full latency and 1.62x
+    with pipelined units; CORDIC add/sub (55-106 cycles) makes it 5-19x slower. LNS is faster
+    while add/sub takes at most 8.6 cycles (3.2 with pipelined units).
+- See `examples/lns_lj_md/README.md` for the measures, the latency table and how to run it.
 
 ## Example
 

@@ -19,12 +19,17 @@
 // Run:  ./lns_lj_md_model examples/lns_lj_md/md_fp32.s <variant> [log_bits exp_bits alu_samples]
 //   The program file only supplies the inputs (dt, nsteps, logint, pos, vel); any of the three
 //   generated programs works.
+// Timing: append "--time <runs>" to run the whole simulation <runs> times (after one warm-up run)
+//   and print "variant,runs,median_ms,min_ms,p10_ms,p90_ms,max_ms" instead of the log. Table
+//   setup and printing are outside the timed part.
 #include "lns_alu.h"
 #include "lns_conversion.h"
 #include "lns_cordic_addsub.h"
 #include "lns_pow.h"
 
+#include <algorithm>
 #include <bit>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
@@ -110,10 +115,11 @@ Input readInput(const std::string &path)
     return in;
 }
 
-using Record = std::vector<std::string>;
+/// One log record per sample: KE, PE, E and the position components, as raw values.
+template <class T> using Records = std::vector<std::vector<T>>;
 
 /// FP32 / FP64 simulation with T = float / double; same operation order as md_fp32.s.
-template <class T> std::vector<Record> runFloat(const Input &in, T dt, T (*fromLiteral)(const std::string &))
+template <class T> Records<T> runFloat(const Input &in, T dt, T (*fromLiteral)(const std::string &))
 {
     const size_t m = in.pos.size(), n = m / 3;
     std::vector<T> x(m), v(m), F(m);
@@ -185,19 +191,7 @@ template <class T> std::vector<Record> runFloat(const Input &in, T dt, T (*fromL
             x[k] = x[k] + t;
         }
     };
-    auto fmt = [](T value) {
-        char buf[32];
-        if constexpr (sizeof(T) == 4)
-        {
-            std::snprintf(buf, sizeof buf, "%08X", std::bit_cast<uint32_t>(value));
-        }
-        else
-        {
-            std::snprintf(buf, sizeof buf, "%.17g", value);
-        }
-        return std::string(buf);
-    };
-    std::vector<Record> log;
+    Records<T> log;
     auto sample = [&] {
         T sum = T(0);
         for (size_t k = 0; k < m; ++k)
@@ -207,12 +201,9 @@ template <class T> std::vector<Record> runFloat(const Input &in, T dt, T (*fromL
         }
         const T KE = half * sum;
         const T E = KE + PE;
-        Record r{fmt(KE), fmt(PE), fmt(E)};
-        for (T c : x)
-        {
-            r.push_back(fmt(c));
-        }
-        log.push_back(r);
+        std::vector<T> r{KE, PE, E};
+        r.insert(r.end(), x.begin(), x.end());
+        log.push_back(std::move(r));
     };
 
     force(true);
@@ -235,7 +226,7 @@ template <class T> std::vector<Record> runFloat(const Input &in, T dt, T (*fromL
 }
 
 /// LNS simulation; same operation order as md_lns.s (add/sub = table or CORDIC).
-std::vector<Record> runLns(const Input &in, const LnsConverter &conv, LnsWord (*add)(LnsWord, LnsWord),
+Records<LnsWord> runLns(const Input &in, const LnsConverter &conv, LnsWord (*add)(LnsWord, LnsWord),
                            LnsWord (*sub)(LnsWord, LnsWord))
 {
     const size_t m = in.pos.size(), n = m / 3;
@@ -302,12 +293,7 @@ std::vector<Record> runLns(const Input &in, const LnsConverter &conv, LnsWord (*
             F[3 * i + 2] = add(F[3 * i + 2], Fz);
         }
     };
-    auto fmt = [](LnsWord w) {
-        char buf[16];
-        std::snprintf(buf, sizeof buf, "%08X", w);
-        return std::string(buf);
-    };
-    std::vector<Record> log;
+    Records<LnsWord> log;
     auto sample = [&] {
         LnsWord sum = add(zero, zero);
         for (size_t k = 0; k < m; ++k)
@@ -316,12 +302,9 @@ std::vector<Record> runLns(const Input &in, const LnsConverter &conv, LnsWord (*
         }
         const LnsWord KE = mul(half, sum);
         const LnsWord E = add(KE, PE);
-        Record r{fmt(KE), fmt(PE), fmt(E)};
-        for (LnsWord c : x)
-        {
-            r.push_back(fmt(c));
-        }
-        log.push_back(r);
+        std::vector<LnsWord> r{KE, PE, E};
+        r.insert(r.end(), x.begin(), x.end());
+        log.push_back(std::move(r));
     };
 
     force(true);
@@ -355,16 +338,94 @@ std::vector<Record> runLns(const Input &in, const LnsConverter &conv, LnsWord (*
 const LnsAlu *gAlu = nullptr;
 LnsWord tableAdd(LnsWord a, LnsWord b) { return gAlu->add(a, b); }
 LnsWord tableSub(LnsWord a, LnsWord b) { return gAlu->sub(a, b); }
+
+std::string format(float value)
+{
+    char buf[16];
+    std::snprintf(buf, sizeof buf, "%08X", std::bit_cast<uint32_t>(value));
+    return buf;
+}
+std::string format(double value)
+{
+    char buf[32];
+    std::snprintf(buf, sizeof buf, "%.17g", value);
+    return buf;
+}
+std::string format(LnsWord value)
+{
+    char buf[16];
+    std::snprintf(buf, sizeof buf, "%08X", value);
+    return buf;
+}
+
+template <class T> void printLog(const Records<T> &log, long logint)
+{
+    for (size_t k = 0; k < log.size(); ++k)
+    {
+        std::printf("%zu %ld", k, static_cast<long>(k) * logint);
+        for (T value : log[k])
+        {
+            std::printf(" %s", format(value).c_str());
+        }
+        std::printf("\n");
+    }
+}
+
+/// Runs the simulation once without timing, then `runs` times timed; prints the time statistics.
+template <class Run> void timeRuns(const std::string &variant, int runs, Run run)
+{
+    size_t keep = run().size(); // warm-up; the result is used so the work is not optimized away
+    std::vector<double> ms;
+    for (int r = 0; r < runs; ++r)
+    {
+        const auto start = std::chrono::steady_clock::now();
+        keep += run().size();
+        const auto stop = std::chrono::steady_clock::now();
+        ms.push_back(std::chrono::duration<double, std::milli>(stop - start).count());
+    }
+    std::sort(ms.begin(), ms.end());
+    auto at = [&](double q) { return ms[static_cast<size_t>(q * (ms.size() - 1) + 0.5)]; };
+    std::printf("variant,runs,median_ms,min_ms,p10_ms,p90_ms,max_ms\n");
+    std::printf("%s,%d,%.4f,%.4f,%.4f,%.4f,%.4f\n", variant.c_str(), runs, at(0.5), ms.front(), at(0.1),
+                at(0.9), ms.back());
+    if (keep == 0)
+    {
+        std::printf("empty\n");
+    }
+}
+
+/// Prints the log, or with timeRunCount > 0 the run-time statistics.
+template <class Run> void output(const std::string &variant, int timeRunCount, long logint, Run run)
+{
+    if (timeRunCount > 0)
+    {
+        timeRuns(variant, timeRunCount, run);
+    }
+    else
+    {
+        printLog(run(), logint);
+    }
+}
 } // namespace
 
 int main(int argc, char **argv)
 {
     try
     {
+        int timeRunCount = 0;
+        if (argc >= 5 && std::string(argv[argc - 2]) == "--time")
+        {
+            timeRunCount = std::stoi(argv[argc - 1]);
+            argc -= 2;
+            if (timeRunCount < 1)
+            {
+                throw std::runtime_error("--time needs at least one run");
+            }
+        }
         if (argc != 3 && argc != 6)
         {
             std::fprintf(stderr, "usage: %s <program.s> fp64|fp32|lns|cordic "
-                                 "[log_bits exp_bits alu_samples]\n", argv[0]);
+                                 "[log_bits exp_bits alu_samples] [--time <runs>]\n", argv[0]);
             return 2;
         }
         const Input in = readInput(argv[1]);
@@ -373,15 +434,19 @@ int main(int argc, char **argv)
         const int expBits = argc == 6 ? std::stoi(argv[4]) : LNS_EXP_LUT_BITS;
         const size_t samples = argc == 6 ? std::stoull(argv[5]) : LNS_ALU_CORRECTION_SAMPLES;
 
-        std::vector<Record> log;
         if (variant == "fp64")
         {
-            log = runFloat<double>(in, std::stod(in.dt),
-                                   [](const std::string &s) { return double(std::stof(s)); });
+            const double dt = std::stod(in.dt);
+            output(variant, timeRunCount, in.logint, [&] {
+                return runFloat<double>(in, dt, [](const std::string &s) { return double(std::stof(s)); });
+            });
         }
         else if (variant == "fp32")
         {
-            log = runFloat<float>(in, std::stof(in.dt), [](const std::string &s) { return std::stof(s); });
+            const float dt = std::stof(in.dt);
+            output(variant, timeRunCount, in.logint, [&] {
+                return runFloat<float>(in, dt, [](const std::string &s) { return std::stof(s); });
+            });
         }
         else if (variant == "lns" || variant == "cordic")
         {
@@ -390,25 +455,18 @@ int main(int argc, char **argv)
             {
                 static const LnsAlu alu(samples);
                 gAlu = &alu;
-                log = runLns(in, conv, tableAdd, tableSub);
+                output(variant, timeRunCount, in.logint, [&] { return runLns(in, conv, tableAdd, tableSub); });
             }
             else
             {
-                log = runLns(in, conv, LnsCordicAddSub::add, LnsCordicAddSub::sub);
+                output(variant, timeRunCount, in.logint, [&] {
+                    return runLns(in, conv, LnsCordicAddSub::add, LnsCordicAddSub::sub);
+                });
             }
         }
         else
         {
             throw std::runtime_error("unknown variant " + variant);
-        }
-        for (size_t k = 0; k < log.size(); ++k)
-        {
-            std::printf("%zu %ld", k, static_cast<long>(k) * in.logint);
-            for (const std::string &value : log[k])
-            {
-                std::printf(" %s", value.c_str());
-            }
-            std::printf("\n");
         }
         return 0;
     }

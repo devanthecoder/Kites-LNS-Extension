@@ -35,7 +35,9 @@ computed in C++ (`tools/lns_lj_md_model.cpp`), from the same inputs, with the ex
 | `../../tools/lns_lj_md_model.cpp` | C++ model: the FP64 reference, plus FP32 and LNS runs that match the simulator bit for bit |
 | `analyze_md.py` | Bit-exact check, error metrics, and instruction counts from the simulator trace |
 | `sweep_md.sh` | Runs every configuration in the simulator and collects the results |
-| `results/` | `md_runs.csv` (one row per run), `md_samples.csv` (every logged sample), `md_counts.csv` (instruction counts) |
+| `time_md.sh` | Measures the software run time of the whole simulation on the host |
+| `plot_md.py` | Computes the cycle estimate and draws the plots |
+| `results/` | `md_runs.csv` (one row per run), `md_samples.csv` (every logged sample), `md_counts.csv` (instruction counts), `md_cycles.csv` (cycle estimate), `md_software_time.csv` (software run time), `plots/` (PDF figures) |
 
 ## Measures (all against FP64)
 
@@ -81,6 +83,39 @@ The sweep covers:
    - `QUICK=1` does a 3-run smoke test.
    - The sweep resumes if interrupted.
 
-**Run time:** the simulator spends most of its time on its own bookkeeping and on rewriting its
-state files, so its run time says nothing about FP32 against LNS. It is recorded, but only
-instruction counts are a fair comparison.
+4. **Measure the software run time and make the plots:**
+   ```
+   bash examples/lns_lj_md/time_md.sh
+   python3 examples/lns_lj_md/plot_md.py
+   ```
+   - `plot_md.py` needs matplotlib.
+
+## Run time
+
+The simulator spends most of its time on its own bookkeeping and on rewriting its state files, so
+its run time says nothing about FP32 against LNS. Run time is measured in two other ways instead,
+both for dt = 0.005 and 200 steps:
+
+- **Estimated cycles (hardware):** the instruction counts from the simulator, each multiplied by a
+  cycle count per instruction, and summed. The cycle counts come from B. Parhami, "Computing with
+  logarithmic number system arithmetic: implementation methods and performance benefits",
+  Computers and Electrical Engineering 87 (2020) 106800 (`docs/LNSResearchPaper.pdf`), where it
+  has them:
+
+  | Instruction | Cycles | Source |
+  | --- | --- | --- |
+  | `fadd.s`, `fsub.s`, `fmul.s` | 4 | Table 3 (TMS320C6711) |
+  | `fdiv.s` | 30 | Table 3 (TMS320C6711) |
+  | `lmul` | 1 | Table 3 (ELM) |
+  | `ladd` / `lsub` | 3 / 3.5 | Table 3 (ELM); subtraction is 4 cycles when the range shifter is used, taken as half of all subtractions (section 4.2) |
+  | `lpown` | 4 | Table 1: 32-bit fixed-point multiply, 32 ns at the ELM's 8 ns cycle |
+  | `laddc` / `lsubc` | 106 or 55 | Assumed: 2 CORDIC passes of 51 iterations at one per cycle, or passes sized for 22 fraction bits |
+  | conversions | 4 | Assumed |
+  | loads, stores, integer, branches | 1 | Same core for both formats |
+
+  The *full latency* estimate charges every instruction its full latency, as the paper does. The
+  *overlapped* estimate assumes pipelined units that start one instruction per cycle, and keeps
+  the full latency only for the divider and CORDIC, which are iterative.
+- **Measured software time (host):** `time_md.sh` times the C++ model running the whole simulation
+  many times on one CPU core and reports the median. FP runs on the host's FP hardware and LNS
+  on the simulator's C++ arithmetic, so this is the cost of LNS done in software.

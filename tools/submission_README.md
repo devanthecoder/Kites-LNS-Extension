@@ -64,10 +64,18 @@ Qt on `PATH`, and maps the folder to drive `K:` so that spaces in the path canno
 ```powershell
 $pyScripts = python -c "import sysconfig, os; print(sysconfig.get_path('scripts') + ';' + sysconfig.get_path('scripts', os.name + '_user'))"
 $env:PATH = "$pyScripts;C:\Qt\Tools\mingw1310_64\bin;C:\Qt\6.9.2\mingw_64\bin;$env:PATH"
-subst K: /D 2>$null
-subst K: "$PWD"
-cd K:\
+if ((Get-Location).Drive.Name -ne 'K') { subst K: /D 2>$null; subst K: "$PWD"; cd K:\ }
 ```
+
+If Windows later says *"An Application Control policy has blocked this file"*, Smart App Control
+is blocking the unsigned pip CMake. Install the signed CMake, then open a new PowerShell window,
+`cd` to the `code` folder and run step 2 again:
+
+```powershell
+winget install Kitware.CMake
+```
+
+If it still blocks the compiler, use the Linux / WSL steps below (not affected by that policy).
 
 **3. Build and start the GUI** (about 5–10 minutes):
 

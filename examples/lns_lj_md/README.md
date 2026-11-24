@@ -37,7 +37,7 @@ computed in C++ (`tools/lns_lj_md_model.cpp`), from the same inputs, with the ex
 | `sweep_md.sh` | Runs every configuration in the simulator and collects the results |
 | `time_md.sh` | Measures the software run time of the whole simulation on the host |
 | `plot_md.py` | Computes the cycle estimate and draws the plots |
-| `results/` | `md_runs.csv` (one row per run), `md_samples.csv` (every logged sample), `md_counts.csv` (instruction counts), `md_cycles.csv` (cycle estimate), `md_software_time.csv` (software run time), `plots/` (PDF figures) |
+| `results/` | `md_runs.csv` (one row per run), `md_samples.csv` (every logged sample), `md_counts.csv` (instruction counts), `md_cycles.csv` (cycle estimate), `md_cycles_divide.csv` (estimate for other `fdiv.s` latencies), `md_averages.csv` (run averages), `md_software_time.csv` (software run time), `plots/` (PDF figures) |
 
 ## Measures (all against FP64)
 
@@ -45,7 +45,11 @@ computed in C++ (`tools/lns_lj_md_model.cpp`), from the same inputs, with the ex
   cancels the method's own energy fluctuation, so only the arithmetic error is left.
 - **Energy drift:** (E(t) − E(0)) / |E(0)|, each variant's own conservation, given for context.
 - **Position deviation:** the root-mean-square distance between each atom's position and its
-  FP64 position.
+  FP64 position at the same step.
+- **Run averages:** the kinetic and potential energy averaged over the run, against FP64's.
+  The motion is chaotic, so trajectories drift apart whatever the arithmetic; averages are
+  what an MD user relies on. The cluster starts on a grid and heats up as it settles, so these
+  are averages over that settling, not equilibrium values.
 
 The sweep covers:
 - **Table sizes:** FP32; LNS with the table at 256–64K add/sub entries and 6–13 (and 23/22)
@@ -115,7 +119,9 @@ both for dt = 0.005 and 200 steps:
 
   The *full latency* estimate charges every instruction its full latency, as the paper does. The
   *overlapped* estimate assumes pipelined units that start one instruction per cycle, and keeps
-  the full latency only for the divider and CORDIC, which are iterative.
+  the full latency only for the divider and CORDIC, which are iterative. Since the divide latency
+  comes from an old chip and divides are a large share of FP32's cycles, `md_cycles_divide.csv`
+  repeats the estimate with `fdiv.s` at 10 and 20 cycles.
 - **Measured software time (host):** `time_md.sh` times the C++ model running the whole simulation
   many times on one CPU core and reports the median. FP runs on the host's FP hardware and LNS
   on the simulator's C++ arithmetic, so this is the cost of LNS done in software.

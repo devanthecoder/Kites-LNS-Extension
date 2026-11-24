@@ -170,7 +170,7 @@ done
 # ---- collect ----
 samples="$OUT/md_samples.csv"
 runs="$OUT/md_runs.csv"
-echo "config,variant,log_bits,exp_bits,alu_samples,dt,steps,step,E,energy_err,drift,pos_dev" >"$samples"
+echo "config,variant,log_bits,exp_bits,alu_samples,dt,steps,step,E,energy_err,drift,pos_dev,KE,PE" >"$samples"
 echo "config,variant,log_bits,exp_bits,alu_samples,dt,steps,sim_seconds,bit_exact,max_energy_err,max_abs_drift,final_pos_dev" >"$runs"
 for r in "${RUNS[@]}"; do # FP64 reference rows (from the model)
     read -r dt steps <<<"$r"
@@ -181,6 +181,9 @@ done
 while read -r name variant lb eb ns dt steps; do
     dir="$WORK/runs/${name}__dt${dt}_n${steps}"
     pre="$name,$variant,$lb,$eb,$ns,$dt,$steps"
+    fmt=lns; [[ "$variant" == fp32 ]] && fmt=fp32
+    python3 "$ANALYZE" metrics "$fmt" "$dir/dump.json" "$WORK/progs/dt${dt}_n${steps}/fp64.txt" \
+        "$LOG_EVERY" >"$dir/metrics.csv" # recomputed from the dump, so it follows analyze_md.py
     tail -n +2 "$dir/metrics.csv" | sed "s/^/$pre,/" >>"$samples"
     tail -n +2 "$dir/metrics.csv" | awk -F, -v pre="$pre" -v t="$(cat "$dir/seconds.txt")" \
         -v b="$(cat "$dir/bitexact.txt")" '

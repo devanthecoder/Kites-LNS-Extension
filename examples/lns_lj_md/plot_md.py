@@ -2,8 +2,12 @@
 """Plots and the cycle estimate for the Lennard-Jones MD benchmark (examples/lns_lj_md).
 
 Reads results/md_runs.csv, md_samples.csv, md_counts.csv (from sweep_md.sh) and
-md_software_time.csv (from time_md.sh). Writes results/md_cycles.csv and PDF figures in
-results/plots/.
+md_software_time.csv (from time_md.sh). Writes results/md_cycles.csv, md_cycles_divide.csv,
+md_averages.csv and PDF figures in results/plots/.
+
+Averages (md_averages.csv): the kinetic and potential energy averaged over each run's logged
+samples after step 0, compared with FP64 at the same (dt, steps). Trajectories of a chaotic system
+drift apart whatever the arithmetic, so these averages are what an MD user actually relies on.
 
 Cycle estimate: cycles = sum over executed instructions of count x cycles per instruction, with
 the counts measured in the simulator (dt 0.005, 200 steps). Two estimates:
@@ -94,7 +98,7 @@ def read(name):
 
 
 def save(fig, name):
-    fig.savefig(os.path.join(PLOTS, name))
+    fig.savefig(os.path.join(PLOTS, name), metadata={"CreationDate": None})  # reproducible files
     plt.close(fig)
     print("wrote", os.path.join("results", "plots", name))
 
@@ -370,6 +374,81 @@ def plot_breakeven(counts):
     save(fig, "md_cycles_breakeven.pdf")
 
 
+def write_divide_sensitivity(counts):
+    """FP32 cycles and the LNS speed-up for other fdiv.s latencies (the paper's 30 is old)."""
+    rows = []
+    for est, model in (("full latency", full_latency), ("overlapped", overlapped)):
+        lns = sum(n * model(m, 0) for m, n in counts["lns_alu4096"].items())
+        fp30 = sum(n * model(m, 0) for m, n in counts["fp32"].items())
+        for fdiv in (10, 20, 30):
+            fp = fp30 + counts["fp32"]["fdiv.s"] * (fdiv - 30)
+            rows.append([est, fdiv, round(fp), round(lns), "%.2f" % (fp / lns)])
+    with open(os.path.join(RES, "md_cycles_divide.csv"), "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["estimate", "fdiv_cycles", "fp32_cycles", "lns_table_cycles", "lns_speedup"])
+        w.writerows(rows)
+    print("wrote results/md_cycles_divide.csv")
+    for r in rows:
+        print("  %-13s fdiv.s %2d cycles: LNS table %sx faster than FP32" % (r[0], r[1], r[4]))
+
+
+def write_averages(samples):
+    groups = {}
+    for r in samples:
+        groups.setdefault((r["config"], r["dt"], r["steps"]), []).append(r)
+    mean = {}
+    for key, rows in groups.items():
+        later = rows[1:]  # after step 0
+        mean[key] = (sum(float(r["KE"]) for r in later) / len(later),
+                     sum(float(r["PE"]) for r in later) / len(later),
+                     float(rows[-1]["pos_dev"]))
+    out = []
+    for (cfg, dt, steps), (ke, pe, pos) in sorted(mean.items()):
+        if cfg == "fp64":
+            continue
+        ke64, pe64, _ = mean[("fp64", dt, steps)]
+        out.append([cfg, dt, steps, "%.8g" % ke, "%.8g" % pe, "%.4e" % (abs(ke - ke64) / ke64),
+                    "%.4e" % (abs(pe - pe64) / abs(pe64)), "%.4e" % pos])
+    with open(os.path.join(RES, "md_averages.csv"), "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["config", "dt", "steps", "mean_KE", "mean_PE", "mean_KE_rel_diff",
+                    "mean_PE_rel_diff", "final_pos_dev"])
+        w.writerows(out)
+    print("wrote results/md_averages.csv")
+    return {(r[0], r[1], r[2]): [float(x) for x in r[5:]] for r in out}
+
+
+AVG_ROWS = [("fp32", "FP32"), ("lns_alu1024", "LNS table 1K"), ("lns_alu4096", "LNS table 4K"),
+            ("lns_alu16384", "LNS table 16K"), ("lns_alu65536", "LNS table 64K"),
+            ("lns_conv6", "LNS table 4K, conv. 6 bits"), ("cordic_conv11", "LNS CORDIC"),
+            ("cordic_conv6", "LNS CORDIC, conv. 6 bits")]
+
+
+def plot_averages(avg):
+    marks = [(2, "Final position deviation", INK2, "s"), (1, "Average potential energy", "#6250d6", "o"),
+             (0, "Average kinetic energy", "#e87ba4", "^")]
+    fig, axes = plt.subplots(1, 2, figsize=(6.8, 3.0), sharey=True)
+    for ax, (dt, steps, title) in zip(axes, (("0.005", "200", "dt 0.005, 200 steps"),
+                                             ("0.02", "200", "dt 0.02, 200 steps (chaotic)"))):
+        for y, (cfg, _) in enumerate(AVG_ROWS):
+            vals = avg[(cfg, dt, steps)]
+            for col, label, color, marker in marks:
+                ax.plot([vals[col]], [y], marker=marker, color=color, markersize=5, linestyle="none",
+                        label=label if y == 0 else None)
+        ax.set_xscale("log")
+        ax.set_title(title, loc="left")
+        ax.set_xlabel("Difference from FP64 (averages: relative)")
+        ax.grid(axis="y", visible=False)
+    axes[0].set_yticks(range(len(AVG_ROWS)))
+    axes[0].set_yticklabels([label for _, label in AVG_ROWS])
+    axes[0].invert_yaxis()
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=3, bbox_to_anchor=(0.5, -0.04))
+    fig.suptitle("Run averages against trajectories", x=0.01, ha="left", fontsize=9)
+    fig.tight_layout(rect=(0, 0.06, 1, 1))
+    save(fig, "md_averages.pdf")
+
+
 def plot_software_time():
     path = os.path.join(RES, "md_software_time.csv")
     if not os.path.exists(path):
@@ -412,6 +491,8 @@ def main():
     write_cycles(counts)
     plot_cycle_breakdown(counts)
     plot_breakeven(counts)
+    write_divide_sensitivity(counts)
+    plot_averages(write_averages(samples))
     plot_software_time()
     return 0
 

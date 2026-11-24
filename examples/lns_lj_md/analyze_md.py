@@ -12,7 +12,8 @@ Usage:
         bit-exact check: every logged word of the simulator equals the model's
   analyze_md.py metrics <fmt> <records> <fp64 model.txt> <log_every>
         <fmt> fp64 | fp32 | lns; <records> is a memory_dump.json or a model .txt.
-        Prints CSV: step, E, energy error vs FP64, own energy drift, position deviation vs FP64
+        Prints CSV: step, E, energy error vs FP64, own energy drift, position deviation vs FP64,
+        kinetic and potential energy
           energy_err(t) = |E(t) - E64(t)| / |E64(0)|
           drift(t)      = (E(t) - E(0)) / |E(0)|
           pos_dev(t)    = sqrt(mean over atoms of |x_i(t) - x64_i(t)|^2)
@@ -85,12 +86,13 @@ def metrics(fmt, records_path, fp64_path, log_every):
     if len(recs) != len(ref):
         raise SystemExit("sample count differs from the FP64 reference")
     e0, e64_0 = recs[0][2], ref[0][2]
-    print("step,E,energy_err,drift,pos_dev")
+    print("step,E,energy_err,drift,pos_dev,KE,PE")
     for k, (r, f) in enumerate(zip(recs, ref)):
         n = (WORDS - 3) // 3
         sq = sum((r[3 + c] - f[3 + c]) ** 2 for c in range(3 * n))
-        print("%d,%.10g,%.6e,%.6e,%.6e" % (k * log_every, r[2], abs(r[2] - f[2]) / abs(e64_0),
-                                          (r[2] - e0) / abs(e0), math.sqrt(sq / n)))
+        print("%d,%.10g,%.6e,%.6e,%.6e,%.10g,%.10g" % (
+            k * log_every, r[2], abs(r[2] - f[2]) / abs(e64_0), (r[2] - e0) / abs(e0),
+            math.sqrt(sq / n), r[0], r[1]))
     return 0
 
 

@@ -1,0 +1,7 @@
+estimate,fdiv_cycles,fp32_cycles,lns_table_cycles,lns_speedup
+full latency,10,9672887,5996800,1.61
+full latency,20,10378397,5996800,1.73
+full latency,30,11083907,5996800,1.85
+overlapped,10,4103078,3398543,1.21
+overlapped,20,4808588,3398543,1.41
+overlapped,30,5514098,3398543,1.62

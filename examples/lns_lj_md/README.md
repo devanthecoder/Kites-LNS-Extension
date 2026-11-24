@@ -117,11 +117,10 @@ both for dt = 0.005 and 200 steps:
   | conversions | 4 | Assumed |
   | loads, stores, integer, branches | 1 | Same core for both formats |
 
-  The *full latency* estimate charges every instruction its full latency, as the paper does. The
-  *overlapped* estimate assumes pipelined units that start one instruction per cycle, and keeps
-  the full latency only for the divider and CORDIC, which are iterative. Since the divide latency
-  comes from an old chip and divides are a large share of FP32's cycles, `md_cycles_divide.csv`
-  repeats the estimate with `fdiv.s` at 10 and 20 cycles.
+  Every instruction is charged its full latency, with no overlap between instructions, as the
+  paper does; LNS runs only on the single-cycle core, so there is no pipeline to model. Since
+  the divide latency comes from an old chip and divides are a large share of FP32's cycles,
+  `md_cycles_divide.csv` repeats the estimate with `fdiv.s` at 10 and 20 cycles.
 - **Measured software time (host):** `time_md.sh` times the C++ model running the whole simulation
   many times on one CPU core and reports the median. FP runs on the host's FP hardware and LNS
   on the simulator's C++ arithmetic, so this is the cost of LNS done in software.

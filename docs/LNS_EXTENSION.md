@@ -178,9 +178,9 @@ C++.
     from step 0); 16K+ entries, or CORDIC with 8+ conversion bits, 1.4e-6 to
     3.7e-6. All variants stay stable.
   - LNS executes 2.0% fewer instructions than FP32 and no division.
-  - Estimated cycles: LNS with table add/sub is 1.85x faster than FP32 at full latency and 1.62x
-    with pipelined units; CORDIC add/sub (55-106 cycles) makes it 5-19x slower. LNS is faster
-    while add/sub takes at most 8.6 cycles (3.2 with pipelined units).
+  - Estimated cycles: LNS with table add/sub is 1.85x faster than FP32 (1.61x if the FP32
+    divide took 10 cycles instead of 30); CORDIC add/sub (55-106 cycles) makes it 5-9x slower.
+    LNS is faster while add/sub takes at most 8.6 cycles.
 - See `examples/lns_lj_md/README.md` for the measures, the latency table and how to run it.
 
 ## Example

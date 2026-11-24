@@ -10,11 +10,9 @@ samples after step 0, compared with FP64 at the same (dt, steps). Trajectories o
 drift apart whatever the arithmetic, so these averages are what an MD user actually relies on.
 
 Cycle estimate: cycles = sum over executed instructions of count x cycles per instruction, with
-the counts measured in the simulator (dt 0.005, 200 steps). Two estimates:
-  full latency  every instruction waits for the previous one to finish (the method of
-                Parhami 2020, section 8);
-  overlapped    pipelined units start one instruction per cycle; only the divider and CORDIC,
-                which are iterative, keep their full latency.
+the counts measured in the simulator (dt 0.005, 200 steps). Every instruction is charged its full
+latency, with no overlap between instructions, as in Parhami 2020, section 8 (LNS runs only on
+the single-cycle core, so there is no pipeline to model).
 Latencies (B. Parhami, "Computing with logarithmic number system arithmetic: implementation
 methods and performance benefits", Computers and Electrical Engineering 87 (2020) 106800):
   Table 3 (TMS320C6711 FP / ELM LNS, cycles): FP add, sub, mul 4; FP divide ~30; LNS add 3,
@@ -67,16 +65,12 @@ def category(m):
     return "integer, branch, other"
 
 
-def full_latency(m, cordic):
+def latency(m, cordic):
     table = {"fadd.s": 4, "fsub.s": 4, "fmul.s": 4, "fdiv.s": 30, "lmul": 1, "ladd": 3,
              "lsub": 3.5, "lpown": 4, "laddc": cordic, "lsubc": cordic}
     if m.startswith("fcvt"):
         return 4
     return table.get(m, 1)
-
-
-def overlapped(m, cordic):
-    return {"fdiv.s": 30, "laddc": cordic, "lsubc": cordic}.get(m, 1)
 
 
 def style():
@@ -277,43 +271,37 @@ def plot_mix(counts):
     save(fig, "md_instruction_mix.pdf")
 
 
-def cycles(counts, cfg, model, cordic):
+def cycles(counts, cfg, cordic=0):
     tot = {c: 0.0 for c in CATS}
     for m, n in counts[cfg].items():
-        tot[category(m)] += n * model(m, cordic)
+        tot[category(m)] += n * latency(m, cordic)
     return tot
 
 
 def write_cycles(counts):
     rows = []
-    for est, model in (("full latency", full_latency), ("overlapped", overlapped)):
-        for cfg, label, cordic in (("fp32", "FP32", 0), ("lns_alu4096", "LNS table", 0),
-                                   ("cordic_conv11", "LNS CORDIC (106-cycle add/sub)", 106),
-                                   ("cordic_conv11", "LNS CORDIC (55-cycle add/sub)", 55)):
-            tot = cycles(counts, cfg, model, cordic)
-            rows.append([est, label, sum(counts[cfg].values())] + [round(tot[c]) for c in CATS]
-                        + [round(sum(tot.values()))])
+    for cfg, label, cordic in (("fp32", "FP32", 0), ("lns_alu4096", "LNS table", 0),
+                               ("cordic_conv11", "LNS CORDIC (106-cycle add/sub)", 106),
+                               ("cordic_conv11", "LNS CORDIC (55-cycle add/sub)", 55)):
+        tot = cycles(counts, cfg, cordic)
+        rows.append([label, sum(counts[cfg].values())] + [round(tot[c]) for c in CATS]
+                    + [round(sum(tot.values()))])
     with open(os.path.join(RES, "md_cycles.csv"), "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["estimate", "config", "instructions"] + ["cycles_" + c for c in CATS]
-                   + ["cycles_total"])
+        w.writerow(["config", "instructions"] + ["cycles_" + c for c in CATS] + ["cycles_total"])
         w.writerows(rows)
     print("wrote results/md_cycles.csv")
     for r in rows:
-        fp = next(x for x in rows if x[0] == r[0] and x[1] == "FP32")[-1]
-        print("  %-13s %-32s %12.0f cycles  %5.2fx FP32" % (r[0], r[1], r[-1], r[-1] / fp))
+        print("  %-32s %12.0f cycles  %5.2fx FP32" % (r[0], r[-1], r[-1] / rows[0][-1]))
     return rows
 
 
 def plot_cycle_breakdown(counts):
-    bars = [("Full latency", "FP32", cycles(counts, "fp32", full_latency, 0)),
-            ("Full latency", "LNS table", cycles(counts, "lns_alu4096", full_latency, 0)),
-            ("Overlapped", "FP32", cycles(counts, "fp32", overlapped, 0)),
-            ("Overlapped", "LNS table", cycles(counts, "lns_alu4096", overlapped, 0))]
-    fig, ax = plt.subplots(figsize=(6.0, 2.6))
-    ypos = [0, 1, 2.4, 3.4]
+    bars = [("FP32", cycles(counts, "fp32")), ("LNS table", cycles(counts, "lns_alu4096"))]
+    fig, ax = plt.subplots(figsize=(6.0, 2.4))
+    ypos = [0, 1]
     shown = set()
-    for y, (est, label, tot) in zip(ypos, bars):
+    for y, (label, tot) in zip(ypos, bars):
         left = 0.0
         for c in CATS:
             w = tot[c] / 1e6
@@ -324,14 +312,14 @@ def plot_cycle_breakdown(counts):
             left += w
         ax.text(left + 0.1, y, "%.2f M" % left, va="center", fontsize=7, color=INK)
     ax.set_yticks(ypos)
-    ax.set_yticklabels(["%s\n%s" % (label, est.lower()) for est, label, _ in bars])
+    ax.set_yticklabels([label for label, _ in bars])
     ax.invert_yaxis()
     ax.set_xlabel("Estimated cycles (millions)")
     ax.set_title("Estimated cycles by instruction type (dt 0.005, 200 steps)", loc="left")
     ax.grid(axis="y", visible=False)
     handles, labels = ax.get_legend_handles_labels()
     order = [labels.index(c) for c in CATS]
-    ax.legend([handles[k] for k in order], CATS, loc="upper center", bbox_to_anchor=(0.5, -0.22),
+    ax.legend([handles[k] for k in order], CATS, loc="upper center", bbox_to_anchor=(0.5, -0.38),
               ncol=3)
     fig.tight_layout()
     save(fig, "md_cycles_breakdown.pdf")
@@ -341,35 +329,31 @@ def plot_breakeven(counts):
     lns = counts["lns_alu4096"]
     addsub = lns["ladd"] + lns["lsub"]
     lat = [2 ** (k / 8) for k in range(0, 57)]  # 1 .. 128 cycles
-    fig, axes = plt.subplots(1, 2, figsize=(6.6, 2.7), sharey=True)
-    for ax, model, title in ((axes[0], full_latency, "Full latency"),
-                             (axes[1], overlapped, "Overlapped")):
-        rest = sum(n * model(m, 0) for m, n in lns.items() if m not in ("ladd", "lsub"))
-        fp = sum(n * model(m, 0) for m, n in counts["fp32"].items())
-        ax.plot(lat, [(rest + addsub * L) / 1e6 for L in lat], color=SERIES["lns_alu4096"][0],
-                label="LNS")
-        ax.axhline(fp / 1e6, color=SERIES["fp32"][0], linestyle="--", linewidth=1.2, label="FP32")
-        even = (fp - rest) / addsub
-        ax.axvline(even, color=MUTED, linewidth=0.8, linestyle=":")
-        ax.text(even * 1.08, fp / 1e6 * 0.55, "break-even\n%.1f cycles" % even, fontsize=6.5,
-                color=INK2)
-        tab = 3.25 if model is full_latency else 1  # average of add 3 and sub 3.5
-        for L, name, mk in ((tab, "table", "D"), (55, "CORDIC 55", "^"), (106, "CORDIC 106", "^")):
-            yv = (rest + addsub * L) / 1e6
-            ax.plot([L], [yv], marker=mk, color=INK, markersize=5, linestyle="none")
-            ax.annotate(name, (L, yv), textcoords="offset points", xytext=(5, -10) if L < 4 else (-4, 6),
-                        fontsize=6.5, ha="left" if L < 4 else "right", color=INK2)
-        ax.set_xscale("log", base=2)
-        ax.set_yscale("log")
-        ax.set_xlim(0.7, 180)
-        ax.set_xticks([1, 2, 4, 8, 16, 32, 64, 128])
-        ax.set_xticklabels(["1", "2", "4", "8", "16", "32", "64", "128"])
-        ax.minorticks_off()
-        ax.set_xlabel("Cycles per LNS add/sub")
-        ax.set_title(title, loc="left")
-    axes[0].set_ylabel("Estimated cycles (millions)")
-    axes[0].legend(loc="upper left")
-    fig.suptitle("When does LNS beat FP32? (dt 0.005, 200 steps)", x=0.01, ha="left", fontsize=9)
+    fig, ax = plt.subplots(figsize=(4.8, 2.9))
+    rest = sum(n * latency(m, 0) for m, n in lns.items() if m not in ("ladd", "lsub"))
+    fp = sum(n * latency(m, 0) for m, n in counts["fp32"].items())
+    ax.plot(lat, [(rest + addsub * L) / 1e6 for L in lat], color=SERIES["lns_alu4096"][0],
+            label="LNS")
+    ax.axhline(fp / 1e6, color=SERIES["fp32"][0], linestyle="--", linewidth=1.2, label="FP32")
+    even = (fp - rest) / addsub
+    ax.axvline(even, color=MUTED, linewidth=0.8, linestyle=":")
+    ax.text(even * 1.08, fp / 1e6 * 0.55, "break-even\n%.1f cycles" % even, fontsize=6.5,
+            color=INK2)
+    for L, name, mk in ((3.25, "table", "D"), (55, "CORDIC 55", "^"), (106, "CORDIC 106", "^")):
+        yv = (rest + addsub * L) / 1e6  # table: average of add 3 and sub 3.5
+        ax.plot([L], [yv], marker=mk, color=INK, markersize=5, linestyle="none")
+        ax.annotate(name, (L, yv), textcoords="offset points", xytext=(5, -10) if L < 4 else (-4, 6),
+                    fontsize=6.5, ha="left" if L < 4 else "right", color=INK2)
+    ax.set_xscale("log", base=2)
+    ax.set_yscale("log")
+    ax.set_xlim(0.7, 180)
+    ax.set_xticks([1, 2, 4, 8, 16, 32, 64, 128])
+    ax.set_xticklabels(["1", "2", "4", "8", "16", "32", "64", "128"])
+    ax.minorticks_off()
+    ax.set_xlabel("Cycles per LNS add/sub")
+    ax.set_ylabel("Estimated cycles (millions)")
+    ax.legend(loc="upper left")
+    ax.set_title("When does LNS beat FP32? (dt 0.005, 200 steps)", loc="left")
     fig.tight_layout()
     save(fig, "md_cycles_breakeven.pdf")
 
@@ -377,19 +361,18 @@ def plot_breakeven(counts):
 def write_divide_sensitivity(counts):
     """FP32 cycles and the LNS speed-up for other fdiv.s latencies (the paper's 30 is old)."""
     rows = []
-    for est, model in (("full latency", full_latency), ("overlapped", overlapped)):
-        lns = sum(n * model(m, 0) for m, n in counts["lns_alu4096"].items())
-        fp30 = sum(n * model(m, 0) for m, n in counts["fp32"].items())
-        for fdiv in (10, 20, 30):
-            fp = fp30 + counts["fp32"]["fdiv.s"] * (fdiv - 30)
-            rows.append([est, fdiv, round(fp), round(lns), "%.2f" % (fp / lns)])
+    lns = sum(n * latency(m, 0) for m, n in counts["lns_alu4096"].items())
+    fp30 = sum(n * latency(m, 0) for m, n in counts["fp32"].items())
+    for fdiv in (10, 20, 30):
+        fp = fp30 + counts["fp32"]["fdiv.s"] * (fdiv - 30)
+        rows.append([fdiv, round(fp), round(lns), "%.2f" % (fp / lns)])
     with open(os.path.join(RES, "md_cycles_divide.csv"), "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["estimate", "fdiv_cycles", "fp32_cycles", "lns_table_cycles", "lns_speedup"])
+        w.writerow(["fdiv_cycles", "fp32_cycles", "lns_table_cycles", "lns_speedup"])
         w.writerows(rows)
     print("wrote results/md_cycles_divide.csv")
     for r in rows:
-        print("  %-13s fdiv.s %2d cycles: LNS table %sx faster than FP32" % (r[0], r[1], r[4]))
+        print("  fdiv.s %2d cycles: LNS table %sx faster than FP32" % (r[0], r[3]))
 
 
 def write_averages(samples):

@@ -47,6 +47,7 @@ If the folder path contains spaces, map it to a drive letter first (`subst K: <p
 then `cd K:\`).
 
 ```powershell
+$env:PATH = "C:\Qt\Tools\mingw1310_64\bin;C:\Qt\6.9.2\mingw_64\bin;$env:PATH"
 cmake -S . -B build\gui -G Ninja -DCMAKE_BUILD_TYPE=Debug `
   -DCMAKE_PREFIX_PATH=C:/Qt/6.9.2/mingw_64 `
   -DCMAKE_C_COMPILER=C:/Qt/Tools/mingw1310_64/bin/gcc.exe `
@@ -55,8 +56,9 @@ cmake -S . -B build\gui -G Ninja -DCMAKE_BUILD_TYPE=Debug `
 cmake --build build\gui --target Kites -j4
 ```
 
-Run `build\gui\Kites.exe` with `C:\Qt\6.9.2\mingw_64\bin` and `C:\Qt\Tools\mingw1310_64\bin` on
-`PATH`. Select the single-cycle (RVSS) core; the LNS registers `l0`–`l31` appear in the register
+The first line is needed in every new PowerShell window: without the MinGW folder on `PATH`,
+`g++` fails on every file with no error message. Then run `build\gui\Kites.exe` from the same
+window. Select the single-cycle (RVSS) core; the LNS registers `l0`–`l31` appear in the register
 view. `examples/lns_lj/lj_lns.s` is a ready program to open and run.
 
 ### Linux / WSL (command line, used for all benchmarks)

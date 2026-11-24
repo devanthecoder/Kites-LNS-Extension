@@ -3,7 +3,8 @@
 #   README.md        tools/submission_README.md (how to build, test and run everything)
 #   LNS_CHANGES.md   files added / changed relative to the upstream KITES we started from
 #   report/          the report PDF given as REPORT, and the demo video given as DEMO
-#   code/            `git archive` of a commit (default HEAD), without docs/LNS_PPT_CONTEXT.md
+#   code/            `git archive` of a commit (default HEAD), without the files in EXCLUDE
+#                    (internal notes, earlier-stage reports, outdated docs, third-party papers)
 #
 # Only committed files go into code/, so commit (and ideally tag) first.
 # Usage (from anywhere inside the repo):
@@ -16,7 +17,17 @@ set -euo pipefail
 
 NAME=CO24BTECH11006_ES24BTECH11030_KITES_LNS
 UPSTREAM_BASE=8da397341af803514da26a1e5ace33177b4a7ae2 # upstream KITES main we last merged
-EXCLUDE=(docs/LNS_PPT_CONTEXT.md)
+EXCLUDE=(
+    docs/LNS_PPT_CONTEXT.md
+    "docs/FinalProposalCompArch (1).pdf"
+    docs/Stage2_Implementation1_CompArch.pdf
+    docs/Stage3_Implementation2_CompArch.pdf
+    docs/LNS_Instruction_Encoding_and_ABI_Summary.docx
+    output/pdf/LNS_Instruction_Encoding_and_ABI_Summary.pdf
+    docs/LNSResearchPaper.pdf
+    docs/Coleman1999_32bit_LNS_unit_ARITH14.pdf
+    tools/submission_README.md
+)
 
 REPO="$(git rev-parse --show-toplevel)"
 REF="${1:-HEAD}"
@@ -39,7 +50,7 @@ for f in "${EXCLUDE[@]}"; do PATHSPEC+=(":(exclude)$f"); done
 git -C "$REPO" archive --format=tar "$COMMIT" -- "${PATHSPEC[@]}" | tar -x -C "$ROOT/code"
 
 # README.md
-sed "s/@COMMIT@/$SHORT/g" "$ROOT/code/tools/submission_README.md" > "$ROOT/README.md"
+git -C "$REPO" show "$COMMIT:tools/submission_README.md" | sed "s/@COMMIT@/$SHORT/g" > "$ROOT/README.md"
 
 # LNS_CHANGES.md
 {

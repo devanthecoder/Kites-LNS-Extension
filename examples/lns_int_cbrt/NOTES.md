@@ -40,9 +40,9 @@
   | Folder | Contents | In git? |
   |---|---|---|
   | top level | `RESULTS.md`, `NOTES.md`, `.gitignore` | yes |
-  | `scripts/` | `gen_cbrt.py`, `check.py`, `sweep.sh`, `sweep_configs.py`, `latency_model.py`, `make_plots.py` | yes |
+  | `scripts/` | `gen_cbrt.py`, `check.py`, `sweep.sh`, `sweep_configs.py`, `latency_model.py`, `make_plots.py`, `make_latency_table.py` | yes |
   | `programs/` | the generated `.s` programs and `reference.json`, plus `batch/`, `ablation/`, `configs/` | only the six `cbrt_*_uniform_bits.s` and `reference.json` |
-  | `results/` | `results.csv`, `config_sweep.csv`, `latency_estimates.csv` (committed); `mix.json`, `model_grid.csv`, `model_sweep.csv`, `check_output.txt` (generated) | committed ones only |
+  | `results/` | `results.csv`, `config_sweep.csv`, `latency_estimates.csv`, `latency_assumptions.csv` (committed); `mix.json`, `model_grid.csv`, `model_sweep.csv`, `check_output.txt` (generated) | committed ones only |
   | `plots/` | slide-ready PNGs and, in `plots/data/`, the tidy CSV each one is drawn from | yes |
 
   Every script finds the other folders relative to itself, so it can be run from anywhere.

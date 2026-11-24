@@ -22,7 +22,12 @@ which reports (citing Coleman et al.):
 Every latency below carries a source tag: "paper T1", "paper T3", "U74" (SiFive U74 Core
 Complex Manual, Table 6: integer mul 3 cycles, div 6-68 cycles) or "ASSUMED". The paper has NO
 number for integer<->LNS conversion or for lpow (x^y), and those are exactly the operations the
-LNS root kernel depends on, so both are swept over a low / mid / high range.
+LNS root kernel depends on, so both are given one fixed value and swept over a low / high range for sensitivity.
+
+Fixed values: the middle entry of each (low, fixed, high) tuple is the one value used in the
+report (LNS convert 4 and lpown-style multiply 4 as in the Lennard-Jones table, so lpow = 4 + 4 = 8;
+divu 20). low/high are
+only for the sensitivity section.
 
 Model: serial sum of latencies of the dynamic instruction mix (no pipelining, no overlap, no
 cache misses, no branch penalty). Two scenarios:
@@ -46,19 +51,21 @@ PROG = os.path.join(ROOT, "programs")                         # .s programs, ref
 RESD = os.path.join(ROOT, "results")                          # CSV / JSON results
 sys.path.insert(0, HERE)
 
-# (value, source) per instruction class. Ranges are (low, mid, high).
+# (value, source) per instruction class. Ranges are (low, fixed, high).
 SCEN_A = {  # cycles
     "alu": (1, "ASSUMED: 1-cycle integer ALU (ELM/TMS single-cycle integer units)"),
     "branch": (1, "ASSUMED: no branch penalty"),
     "load": (1, "paper T3: ELM load 1 cycle (cache hit)"),
-    "store": (1, "ASSUMED: integer store 1 cycle (ELM LNS store is 2, TMS 4)"),
+    "store": (1, "ASSUMED: integer store 1 cycle, same core for every format (as in the LJ table)"),
     "mul": (3, "U74: integer mul 3 cycles (not in paper)"),
-    "div": ((6, 20, 68), "U74: integer div 6-68 cycles, operand-dependent (not in paper)"),
-    "lns_convert": ((1, 2, 4), "ASSUMED: the paper gives no converter latency"),
-    "lns_pow": ((1, 4, 8), "ASSUMED: not in paper. 1 = like ELM square root (shift); "
-                           "4 = exp-table lookup + 32x32 multiply (KITES lpow); 8 = slow"),
+    "div": ((6, 20, 68), "U74: integer div 6-68 cycles, operand-dependent (not in paper); fixed 20"),
+    "lns_convert": ((1, 4, 8), "ASSUMED: the paper gives no converter latency; fixed 4 = LJ table"),
+    "lns_pow": ((5, 8, 16), "DERIVED (not in paper): KITES lpow = exp-table stage (lookup + "
+                            "interpolating multiply-add, same as an LNS->int convert: 4) + Lx*m "
+                            "multiply (same as LJ's lpown: 4) = 8. 5 = lookup 1 + multiply 4 "
+                            "(no interpolation); 16 = twice as slow"),
     "lns_alu": (1, "paper T3: ELM divide 1 cycle (ldiv, setup only)"),
-    "lns_mem": (1.5, "paper T3: ELM load 1 / store 2 (every use here is one lsw + one llw)"),
+    "lns_mem": (1, "ASSUMED: LNS load/store 1 like the LJ table (ELM T3: load 1, store 2); setup only"),
     "fp_add": (4, "paper T3: TMS add 4 cycles"),
     "fp_mul": (4, "paper T3: TMS multiply 4 cycles"),
     "fp_div": (30, "paper T3: TMS divide ~30 cycles"),
@@ -74,11 +81,11 @@ SCEN_B = {  # ns
     "store": (8, "ASSUMED: = load (ELM LNS store is 16 ns)"),
     "mul": (32, "paper T1: fixed-point multiply 32 ns"),
     "div": ((64, 80, 96), "paper T1 text: division 2-3x multiplication"),
-    "lns_convert": ((9, 17, 32), "ASSUMED: ROM 5 + add 4 / ROM + 3 adds / = a multiply"),
-    "lns_pow": ((4, 37, 64), "ASSUMED: 4 = LNS multiply (T1); 37 = ROM 5 + 32x32 multiply 32; "
-                             "64 = 2 multiplies"),
+    "lns_convert": ((9, 32, 64), "ASSUMED: fixed 32 = 4 ELM cycles of 8 ns (matches scenario A)"),
+    "lns_pow": ((40, 64, 128), "DERIVED: fixed 64 = convert stage 32 + fixed-point multiply 32 "
+                               "(T1); 40 = ROM 8 + multiply 32; 128 = twice as slow"),
     "lns_alu": (4, "paper T1: LNS divide 4 ns"),
-    "lns_mem": (12, "paper T3: ELM load 8 / store 16 ns, mean"),
+    "lns_mem": (8, "paper T3: ELM load 8 ns (store taken equal, as in LJ); setup only"),
     "fp_add": (28, "paper T1: FP add 28 ns"),
     "fp_mul": (22, "paper T1: FP multiply 22 ns"),
     "fp_div": ((44, 55, 66), "paper T1 text: division 2-3x multiplication"),
@@ -137,7 +144,7 @@ def kroot_mixes(set_name="uniform_u64", tables=("11", "11")):
 
 def main():
     rows = []
-    levels = ("low", "mid", "high")
+    levels = ("low", "fixed", "high")
     print("ESTIMATE, not a measurement: serial latency sum per root from the paper's Tables 1/3 "
           "plus labelled assumptions.\n")
     for scen_name, scen, unit in (("A", SCEN_A, "cycles"), ("B", SCEN_B, "ns")):
@@ -159,14 +166,14 @@ def main():
                      "instr_per_root": f"{sum(mix.values()):.3f}",
                      **{f"A_cycles_{lv}": f"{ca[i]:.2f}" for i, lv in enumerate(levels)},
                      **{f"B_ns_{lv}": f"{cb[i]:.1f}" for i, lv in enumerate(levels)}})
-    # break-even lpow latency for L1 vs B1 / F0, scenario A, other classes at mid
+    # break-even lpow latency for L1 vs B1 / F0, other classes at their fixed value
     for scen_name, scen in (("A", SCEN_A), ("B", SCEN_B)):
         for rival in ("B1", "F0"):
             rest = cost({c: n for c, n in k3["L1"].items() if c != "lns_pow"}, scen, 1)
             target = cost(k3[rival], scen, 1)
             be = (target - rest) / k3["L1"]["lns_pow"]
             print(f"scenario {scen_name}: L1 beats {rival} while one lpow costs < {be:.1f} "
-                  f"{'cycles' if scen_name == 'A' else 'ns'} (other classes at mid)")
+                  f"{'cycles' if scen_name == 'A' else 'ns'} (other classes at their fixed value)")
     print()
     for set_name in ("uniform_u64", "width32"):
         kroot_block(set_name, rows, levels)

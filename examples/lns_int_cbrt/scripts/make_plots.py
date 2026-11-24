@@ -253,20 +253,22 @@ wr("7a_time_estimate_k3.csv", [{**r, "note": "ESTIMATE: Parhami 2020 Tables 1/3 
 order = ["B1", "F0", "L1", "L2", "B0", "L0"]
 est = sorted(est, key=lambda r: order.index(r["variant"]))
 fig, ax = plt.subplots(figsize=(10, 5.5))
-mid = [F(r["A_cycles_mid"]) for r in est]
-lo = [F(r["A_cycles_mid"]) - F(r["A_cycles_low"]) for r in est]
-hi = [F(r["A_cycles_high"]) - F(r["A_cycles_mid"]) for r in est]
+fixed = {r["variant"]: F(r["A_cycles_fixed"]) for r in est}
 cmap = {"B1": COL["integer"], "F0": COL["fp"], "L1": COL["lns"], "L2": COL["lns2"],
         "B0": COL["approx"], "L0": COL["approx"]}
-bars = ax.bar([NAMES[r["variant"]] for r in est], mid, yerr=[lo, hi], capsize=6,
+bars = ax.bar([NAMES[r["variant"]] for r in est], [fixed[r["variant"]] for r in est],
               color=[cmap[r["variant"]] for r in est])
-for bar, m in zip(bars, mid):
-    ax.text(bar.get_x() + bar.get_width() / 2 + 0.22, m + 3, f"{m:.0f}", fontweight="bold")
+for bar, r in zip(bars, est):
+    m = fixed[r["variant"]]
+    ax.text(bar.get_x() + bar.get_width() / 2, m + 3, f"{m:.1f}", ha="center", fontweight="bold")
+ax.axvline(3.5, color="#999", ls="--")
 ax.set_ylabel("estimated cycles per root")
-ax.set_title("ESTIMATE: L1 ~3.7x faster than integer, ~5.6x faster than FP64 (k = 3)")
-save(fig, "7a_time_estimate_k3.png", "ESTIMATE, not measured. Latencies from Parhami (2020) "
-     "Table 3 + SiFive U74 for integer mul/div; convert and lpow latencies ASSUMED (bars = "
-     "low/mid/high).\nSerial sum over the measured instruction mix, no pipelining.")
+ax.set_title(f"ESTIMATE: L1 {fixed['B1'] / fixed['L1']:.1f}x faster than integer, "
+             f"{fixed['F0'] / fixed['L1']:.1f}x faster than FP64 (k = 3)")
+save(fig, "7a_time_estimate_k3.png", "ESTIMATE, not measured. One fixed latency per instruction "
+     "(results/latency_assumptions.csv): Parhami (2020) Table 3 where it has one; LNS convert 4\n"
+     "and lpow 8 (4 table stage + 4 multiply) as in the LJ table; integer mul 3 / divu 20 from the "
+     "SiFive U74 manual. Serial sum, no pipelining. Sensitivity: plot 7b.")
 
 k3 = lm.k3_mixes()
 L1 = k3["L1"]
@@ -277,7 +279,7 @@ for cls, xs in (("lns_pow", range(1, 161)), ("lns_convert", range(1, 81))):
         rows.append({"swept_class": cls, "latency_cycles": x,
                      "L1_cycles": lm.cost(L1, lm.SCEN_A, 1, {cls: x}),
                      "B1_cycles": b1m, "F0_cycles": f0m,
-                     "note": "ESTIMATE, scenario A, all other classes at mid"})
+                     "note": "ESTIMATE, all other classes at their fixed value"})
 wr("7b_sensitivity.csv", rows)
 fig, axs = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
 for ax, cls, lab, n in ((axs[0], "lns_pow", "one lpow latency (cycles)", L1["lns_pow"]),
@@ -293,13 +295,16 @@ for ax, cls, lab, n in ((axs[0], "lns_pow", "one lpow latency (cycles)", L1["lns
         ax.axvline(be, color=c, ls=":", alpha=0.7)
         ax.annotate(f"break-even\n{be:.0f} cycles", (be, t), xytext=(5, -40),
                     textcoords="offset points", fontsize=9, color=c)
-    ax.axvspan(*((1, 8) if cls == "lns_pow" else (1, 4)), color="#2CA02C", alpha=0.1)
+    fx = lm.pick(lm.SCEN_A[cls], 1)
+    ax.axvline(fx, color=COL["lns"], lw=1.5)
+    ax.annotate(f"fixed value\n{fx} cycles", (fx, lm.cost(L1, lm.SCEN_A, 1)), xytext=(8, 25),
+                textcoords="offset points", fontsize=9, color=COL["lns"])
     ax.set_xlabel(lab)
 axs[0].set_ylabel("estimated cycles per root")
 axs[0].legend(fontsize=10, loc="upper left")
 fig.suptitle("ESTIMATE: how slow could the unmeasured LNS ops be before L1 loses?")
-save(fig, "7b_sensitivity.png", "ESTIMATE. Green band = assumed range used in the main estimate "
-     "(paper gives no lpow or converter latency). Other latencies at mid.")
+save(fig, "7b_sensitivity.png", "ESTIMATE. Solid green line = the fixed value used in the "
+     "headline (the paper gives no lpow or converter latency). Every other latency at its fixed value.")
 
 # 8. exponent precision predicts fix-up ------------------------------------------------------
 model = os.environ.get("CBRT_MODEL", "/home/user/buildsrc/lns_cbrt_accuracy")

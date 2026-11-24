@@ -646,72 +646,61 @@ Two experiments on the exponent 1/k given to `lpow`:
 
 ### I.D Estimated time from the paper (ESTIMATE, not a measurement)
 
-`latency_model.py` multiplies the measured per-root instruction mix by latencies from
+`scripts/latency_model.py` multiplies the measured per-root instruction mix by **one fixed
+latency per instruction** (table I.E) and sums them serially. The fixed values come from
 **B. Parhami, "Computing with logarithmic number system arithmetic", Computers and Electrical
-Engineering 87 (2020) 106800** (the team's research paper), and sums them serially. Every
-latency is tagged in the script and in its printed output with where it comes from. Raw
-numbers: `latency_estimates.csv`.
+Engineering 87 (2020) 106800** (the team's research paper) where it has them, and match the
+Lennard-Jones table where it does not (LNS convert 4, multiply 4). Raw numbers:
+`results/latency_estimates.csv` (the `A_cycles_fixed` column; `low`/`high` are the sensitivity
+cases in I.F). A second, gate-delay version (scenario B, ns from the paper's Table 1) is in the
+same file as a cross-check.
 
-| Instruction class | Scenario A: cycles | Source | Scenario B: ns | Source |
-|---|---:|---|---:|---|
-| LNS multiply/divide (`ldiv`) | 1 | paper Table 3 (ELM) | 4 | paper Table 1 |
-| LNS load / store | 1 / 2 | paper Table 3 (ELM) | 8 / 16 | paper Table 3 |
-| **int → LNS, LNS → int convert** | **1 / 2 / 4** | **ASSUMED (not in paper)** | **9 / 17 / 32** | **ASSUMED** |
-| **`lpow`** | **1 / 4 / 8** | **ASSUMED (not in paper)** | **4 / 37 / 64** | **ASSUMED** |
-| FP add, multiply | 4, 4 | paper Table 3 (TMS320C6711) | 28, 22 | paper Table 1 |
-| FP divide | 30 | paper Table 3 (TMS) | 44 / 55 / 66 | paper text: 2–3× multiply |
-| FP square root | 40 | paper Table 3 (TMS) | 59 / 73 / 88 | ASSUMED: 4/3 × divide |
-| FP convert / move | 4 / 1 | ASSUMED | 28 / 4 | ASSUMED |
-| integer multiply | 3 | SiFive U74 manual (not paper) | 32 | paper Table 1 |
-| integer divide | 6 / 20 / 68 | SiFive U74 manual | 64 / 80 / 96 | paper text: 2–3× multiply |
-| integer ALU, branch, load, store | 1 | ASSUMED (load: paper T3) | 4, 4, 8, 8 | Table 1 add / T3 load |
+**k = 3, the TCP CUBIC variants (uniform_bits), fixed latencies:**
 
-Low / mid / high move all ranged entries together. `lpow` "mid" = an exp-table lookup plus a
-32×32 multiply, which is what KITES's `lpow` does.
-
-**k = 3, the TCP CUBIC variants (uniform_bits):**
-
-| variant | instructions | A: cycles low / mid / high | B: ns low / mid / high |
+| variant | instructions per root | estimated cycles per root | gate-delay cross-check (ns) |
 |---|---:|---:|---:|
-| B0 kernel (approx) | 46.3 | 56 / 69 / 113 | 328 / 343 / 358 |
-| B1 integer exact | 62.3 | 89 / 116 / 208 | 620 / 651 / 681 |
-| L0 LNS (approx) | 9.0 | 9 / 14 / 22 | 54 / 103 / 160 |
-| **L1 LNS exact** | **18.2** | **27 / 32 / 40** | **208 / 257 / 314** |
-| L2 LNS log-divide | 24.5 | 36 / 38 / 42 | 280 / 296 / 326 |
-| F0 FP64 Newton | 36.5 | 176 / 176 / 176 | 714 / 747 / 780 |
+| B0 kernel (approx) | 46.3 | 69.1 | 343 |
+| B1 integer exact | 62.3 | 116.1 | 651 |
+| L0 LNS (approx) | 9.0 | 22.0 | 160 |
+| **L1 LNS exact** | 18.2 | 39.6 | 314 |
+| L2 LNS log-divide | 24.5 | 40.5 | 318 |
+| F0 FP64 Newton | 36.5 | 175.5 | 747 |
 
-**Roots of degree k = 2..6 (scenario A cycles, mid):**
+**Roots of degree k = 2..6 (cycles per root, fixed latencies):**
 
 | k | input | integer BK | FP64 FK | `fsqrt` FS | LNS LK | LNS LDK |
 |---|---|---:|---:|---:|---:|---:|
-| 2 | 32-bit | 133 | 145 | 65 | **25** | 29 |
-| 2 | 64-bit uniform | 163 | 144 | **64** | 859 | 863 |
-| 3 | 64-bit uniform | 210 | 176 | – | 48 | **38** |
-| 4 | 64-bit uniform | 188 | 194 | – | **37** | 41 |
-| 5 | 64-bit uniform | 233 | 212 | – | **43** | 50 |
-| 6 | 64-bit uniform | 275 | 230 | – | **49** | 56 |
+| 2 | 32-bit | 133 | 145 | 65 | 33 | 32 |
+| 2 | 64-bit uniform | 163 | 144 | 64 | 867 | 866 |
+| 3 | 64-bit uniform | 210 | 175 | – | 56 | 40 |
+| 4 | 64-bit uniform | 188 | 194 | – | 45 | 44 |
+| 5 | 64-bit uniform | 233 | 211 | – | 50 | 52 |
+| 6 | 64-bit uniform | 275 | 230 | – | 56 | 58 |
 
 **What the estimate says, bluntly**
 
-1. **The instruction-count win survives, and grows against FP.** At mid latencies L1 is about
-   **3.7× faster than B1** (32 vs 116 cycles) and **5.6× faster than FP64** (176). By
-   instruction count FP was the runner-up; by time it is the slowest, because each of its 3
-   divides costs about 30 cycles on the paper's FP chip.
-2. **L1 stays ahead of the integer kernel until one `lpow` costs about 88 cycles**
-   (scenario A, everything else mid), and ahead of FP until about 148. Nothing in the paper
-   suggests an LNS operation anywhere near that slow (ELM's slowest is a 4-cycle subtract).
-   So the conclusion is robust to the one number nobody has measured.
+1. **The instruction-count win survives.** L1 takes about **39.6 cycles** per root against
+   **116.1** for the integer kernel (**2.9× faster**) and **175.5** for FP64
+   (**4.4× faster**). By instruction count FP was the runner-up; by time it is the
+   slowest, because each of its 3 divides costs about 30 cycles on the paper's FP chip.
+2. **`lpow` is no longer the whole story.** At 8 cycles, L1 (one `lpow`) and L2 (no `lpow`, divide
+   the log with `ldiv` instead) cost almost the same: 39.6 vs 40.5
+   cycles. On 64-bit k = 3 inputs LDK is clearly cheaper (40 vs 56); for k = 4..6 the two are
+   within a few cycles. If `lpow` turns out slow in hardware, the log-divide path is the fallback,
+   and it needs no `lpow` at all.
 3. **Square roots flip for narrow inputs.** By instruction count LNS only tied `fsqrt.d`
-   (15.5 each). By time it wins for 32-bit inputs (25 vs 65 cycles), because the paper's FP
-   square root takes about 40 cycles. On 64-bit inputs it still loses by 13×.
-4. **The ns scenario (gate delays) agrees in direction:** L1 257 ns vs B1 651 ns vs F0 747 ns.
+   (15.5 each). By time it wins for 32-bit inputs (33 vs
+   65 cycles), because the paper's FP square root takes about 40 cycles.
+   On 64-bit inputs it still loses by more than 10×.
+4. **The gate-delay cross-check agrees in direction:** L1 314 ns vs B1
+   651 ns vs F0 747 ns.
 
 **Where the paper does not match KITES (say these before anyone else does)**
 
 - **The paper has no converter or `lpow` latency.** It describes a converter (Kim et al.:
   leading-zero counter, shifter, 3 carry-save levels, a 26-bit adder) but gives no timing.
-  Those are the two operations the LNS kernel depends on, so their values here are guesses,
-  swept over a range.
+  Those are the two operations the LNS kernel depends on, so their values here are fixed guesses
+  (convert 4, `lpow` 8) and section I.F shows what happens if they are wrong.
 - **Different LNS format.** ELM uses 8 integer + 23 fraction bits; KITES uses 9 + 22. One
   more fraction bit would roughly halve the k = 3 and k = 2 fix-ups (inferred, not run). It
   would not rescue k = 2 on 64-bit inputs (about 265 steps instead of 530).
@@ -730,6 +719,63 @@ Low / mid / high move all ranged entries together. `lpow` "mid" = an exp-table l
 - **Power consumption cannot be modelled from the paper.** It only gives a qualitative
   "factor of about 2" saving for LNS multiply/divide-type circuits and 50% less switching
   activity. Nothing here estimates energy.
+
+### I.E Every latency used, one fixed value per instruction
+
+Raw: `results/latency_assumptions.csv`. Same format as the Lennard-Jones table. "Overlapped"
+follows the LJ convention (pipelined units issue one per cycle; dividers and square root keep
+their full latency). The cbrt estimate is a serial sum and uses only the Latency column.
+
+| Instruction | Used by | Latency (cycles) | Overlapped | Where the number comes from | Guess? |
+|---|---|---:|---:|---|---|
+| Integer ALU (addi, add, sub, shifts, mv, sltiu, li, la) | all | 1 | 1 | Same core for every format (single-cycle integer units on ELM and TMS) | Assumption |
+| Branches, jumps (beqz, bnez, bgeu, bltu, beq, j) | all | 1 | 1 | No branch penalty | Assumption |
+| ld, lbu, lwu | all | 1 | 1 | Table 3, ELM load (cache hit) | From paper |
+| sd, sw | all | 1 | 1 | Same core for every format (as in the LJ table) | Assumption |
+| mul, mulw, mulhu | B0, B1; fix-up of L1, L2, F0 | 3 | 1 | SiFive U74 Core Complex Manual, Table 6 | Datasheet, not paper |
+| divu | B0, B1 (Newton step) | 20 | 20 | SiFive U74 manual: 6-68 cycles depending on operands; 20 picked inside that range | Guess within a datasheet range |
+| fcvt.lns.lu, fcvt.lu.lns, fcvt.lns.w | all LNS variants (2 per root) | 4 | 1 | The paper describes converter designs but gives no cycle count; 4 as in the LJ table | Guess |
+| lpow | L0, L1, LK (1 per root) | 8 | 1 | Derived from KITES' lpow: exp-table stage (lookup + interpolating multiply-add, the same work as an LNS->int convert = 4) + log(x) * y multiply (the same as LJ's lpown = 4) | Derived from our assumptions |
+| ldiv | L2, LDK; setup of L1/LK | 1 | 1 | Table 3, ELM divide | From paper |
+| llw, lsw | setup only (building 1/k) | 1 | 1 | Same core for every format (ELM: load 1, store 2) | Assumption |
+| fadd.d | F0, FK | 4 | 1 | Table 3, TMS320C6711 add (an FP32 chip, used for FP64) | From paper |
+| fmul.d | F0, FK | 4 | 1 | Table 3, TMS320C6711 multiply | From paper |
+| fdiv.d | F0, FK (3 per root) | 30 | 30 | Table 3, TMS320C6711 divide (~30) | From paper |
+| fsqrt.d | FS (k = 2 only) | 40 | 40 | Table 3, TMS320C6711 square root (~40) | From paper |
+| fcvt.d.lu, fcvt.lu.d | F0, FK | 4 | 1 | Taken equal to the TMS add pipeline | Guess |
+| fmv.x.d, fmv.d.x | F0 | 1 | 1 | Register move | Assumption |
+
+**Why `lpow` is 8 and not 4.** LJ's `lpown` multiplies the log by an integer: one multiply, 4
+cycles. KITES' `lpow` (`src/processor/lns/lns_pow.cpp`) first has to turn the exponent y back
+into a number: it looks up the exp table *and* interpolates (`exp2Frac`: base + slope × remainder,
+a second multiply), which is exactly the work an LNS→int convert does (4 cycles here), and only
+then multiplies log(x) by it (4, as `lpown`). 4 + 4 = 8. A bare lookup with no interpolation
+would give 5 (1 + 4); that is the low end of the sensitivity range.
+
+**Differences from the LJ table, all deliberate:** integer `mul` (3) and `divu` (20) are not in
+the LJ table, because the LJ kernel has none; they come from the SiFive U74 manual, not the
+paper. `fsqrt.d` (40) and `fcvt.d.lu` / `fcvt.lu.d` (4) are likewise cbrt-only. The TMS numbers
+are FP32 figures used for FP64, which flatters F0 (same caveat as LJ). The older U74-based model
+(`tools/cbrt_cost_model.py`, section F) uses different guesses and is superseded by this table.
+
+### I.F Sensitivity to the assumptions (kept out of the headline on purpose)
+
+The headline uses the fixed values above. The guessed ones move it as follows (k = 3, cycles
+per root, everything else fixed):
+
+| What changes | L1 LNS | B1 integer | F0 FP64 |
+|---|---:|---:|---:|
+| Fixed set (headline) | 39.6 | 116.1 | 175.5 |
+| All guesses optimistic (convert 1, `lpow` 5, `divu` 6) | 30.6 | 89.3 | 175.5 |
+| All guesses pessimistic (convert 8, `lpow` 16, `divu` 68) | 55.6 | 207.8 | 175.5 |
+
+- **`lpow` is probably slower than `lpown`**, because it adds the exp-table stage before the
+  multiply. That is already in the fixed 8. **L1 still beats the integer kernel until one `lpow`
+  costs about 84 cycles** (and FP64 until about 144), with everything else fixed.
+- **Converters:** L1 beats integer until one convert costs about 42 cycles (FP64: about 72).
+- **`divu`** only moves the integer baseline: 6–68 cycles puts B1 between 89 and
+  208. L1 wins at every point of that range.
+- Plot `plots/7b_sensitivity.png` shows both break-evens.
 
 ## What must not be claimed
 

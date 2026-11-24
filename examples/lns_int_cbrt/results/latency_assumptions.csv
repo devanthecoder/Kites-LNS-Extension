@@ -1,18 +1,17 @@
-instruction,used_by,paper_model_full_cycles,u74_model_cycles,overlapped_cycles,source,guess,vs_LJ_table
-"Integer ALU (addi, add, sub, shifts, mv, sltiu, li, la)",all,1,1,1,"Single-cycle integer units (ELM, TMS)",Assumption,Same as LJ
-"Branches, jumps (beqz, bnez, bgeu, bltu, beq, j)",all,1,1,1,No branch penalty,Assumption,Same as LJ
-"ld, lbu, lwu",all,1,1,1,"Table 3, ELM load (cache hit)",From paper,Same as LJ
-"sd, sw",all,1,1,1,"Same core for every format (ELM store is 2, TMS 4)",Assumption,Same as LJ
-"mul, mulw, mulhu","B0, B1, fix-up of L1/L2/F0",3,3,1,"SiFive U74 Core Complex Manual, Table 6","Datasheet, not paper",Not in LJ
-divu,"B0, B1 (Newton step)",6 / 20 / 68 (mid 20),"30 (sweep 6, 20, 40, 68)",= full (not pipelined),"SiFive U74: 6-68, operand-dependent. 20 and 30 are picks inside that range",Range from datasheet; the pick is a guess,Not in LJ
-"fcvt.lns.lu, fcvt.lu.lns, fcvt.lns.w","L0, L1, L2, LK, LDK",1 / 2 / 4 (mid 2),"2 (sweep 1, 3, 6)",1,The paper describes converter designs but gives no cycle count,Guess,DISAGREES: LJ uses 4
-lpow,"L0, L1, LK",1 / 4 / 8 (mid 4),"3 (sweep 3, 10, 30)",1,Not in the paper. LJ derives 4 = 32 ns fixed-point multiply / 8 ns ELM cycle (Table 1),Guess / derived,Paper-model mid 4 matches LJ; U74 model's 3 does not
-ldiv,"L2, LDK; setup of L1/LK",1,1,1,"Table 3, ELM divide",From paper,Matches LJ lmul = 1
-"llw, lsw",setup only (building 1/k),1 / 2 (avg 1.5),1,1,"Table 3, ELM load 1 / store 2",From paper,LJ uses 1 for both; no effect here (0 per root)
-fadd.d,"F0, FK",4,4,1,"Table 3, TMS320C6711 add (an FP32 chip, used for FP64)",From paper,Same as LJ fadd.s
-fmul.d,"F0, FK",4,4,1,"Table 3, TMS320C6711 multiply",From paper,Same as LJ fmul.s
-fdiv.d,"F0, FK (3 per root)",30,20,30,"Table 3, TMS320C6711 divide (~30)",From paper (U74 model's 20 is a guess),Paper model matches LJ 30; U74 model's 20 does not
-fsqrt.d,FS (k = 2 only),40,not modelled,40,"Table 3, TMS320C6711 square root (~40)",From paper,Not in LJ
-"fcvt.d.lu, fcvt.lu.d","F0, FK",4,3,1,Assumed equal to the TMS add pipeline,Guess,Not in LJ (LJ has no int<->FP convert)
-"fmv.x.d, fmv.d.x",F0,1,1,1,Register move,Assumption,Like LJ fsgnj.s = 1
-ecall,setup only,1,1,1,-,Assumption,-
+instruction,used_by,latency_cycles,overlapped_cycles,where_the_number_comes_from,guess,sensitivity_range_cycles
+"Integer ALU (addi, add, sub, shifts, mv, sltiu, li, la)",all,1,1,Same core for every format (single-cycle integer units on ELM and TMS),Assumption,
+"Branches, jumps (beqz, bnez, bgeu, bltu, beq, j)",all,1,1,No branch penalty,Assumption,
+"ld, lbu, lwu",all,1,1,"Table 3, ELM load (cache hit)",From paper,
+"sd, sw",all,1,1,Same core for every format (as in the LJ table),Assumption,
+"mul, mulw, mulhu","B0, B1; fix-up of L1, L2, F0",3,1,"SiFive U74 Core Complex Manual, Table 6","Datasheet, not paper",
+divu,"B0, B1 (Newton step)",20,20,SiFive U74 manual: 6-68 cycles depending on operands; 20 picked inside that range,Guess within a datasheet range,6-68
+"fcvt.lns.lu, fcvt.lu.lns, fcvt.lns.w",all LNS variants (2 per root),4,1,The paper describes converter designs but gives no cycle count; 4 as in the LJ table,Guess,1-8
+lpow,"L0, L1, LK (1 per root)",8,1,"Derived from KITES' lpow: exp-table stage (lookup + interpolating multiply-add, the same work as an LNS->int convert = 4) + log(x) * y multiply (the same as LJ's lpown = 4)",Derived from our assumptions,5-16; L1 still beats integer up to ~84
+ldiv,"L2, LDK; setup of L1/LK",1,1,"Table 3, ELM divide",From paper,
+"llw, lsw",setup only (building 1/k),1,1,"Same core for every format (ELM: load 1, store 2)",Assumption,
+fadd.d,"F0, FK",4,1,"Table 3, TMS320C6711 add (an FP32 chip, used for FP64)",From paper,
+fmul.d,"F0, FK",4,1,"Table 3, TMS320C6711 multiply",From paper,
+fdiv.d,"F0, FK (3 per root)",30,30,"Table 3, TMS320C6711 divide (~30)",From paper,
+fsqrt.d,FS (k = 2 only),40,40,"Table 3, TMS320C6711 square root (~40)",From paper,
+"fcvt.d.lu, fcvt.lu.d","F0, FK",4,1,Taken equal to the TMS add pipeline,Guess,
+"fmv.x.d, fmv.d.x",F0,1,1,Register move,Assumption,

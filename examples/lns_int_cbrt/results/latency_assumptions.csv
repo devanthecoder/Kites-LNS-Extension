@@ -1,0 +1,17 @@
+instruction,used_by,latency_cycles,where_the_number_comes_from,guess,sensitivity_range_cycles
+"Integer ALU (addi, add, sub, shifts, mv, sltiu, li, la)",all,1,Same core for every format (single-cycle integer units on ELM and TMS),Assumption,
+"Branches, jumps (beqz, bnez, bgeu, bltu, beq, j)",all,1,No branch penalty,Assumption,
+"ld, lbu, lwu",all,1,"Table 3, ELM load (cache hit)",From paper,
+"sd, sw",all,1,Same core for every format (as in the LJ table),Assumption,
+"mul, mulw, mulhu","B0, B1; fix-up of L1, L2, F0",3,"SiFive U74 Core Complex Manual, Table 6","Datasheet, not paper",
+divu,"B0, B1 (Newton step)",20,SiFive U74 manual: 6-68 cycles depending on operands; 20 picked inside that range,Guess within a datasheet range,6-68
+"fcvt.lns.lu, fcvt.lu.lns, fcvt.lns.w",all LNS variants (2 per root),4 at 11/11 bits,"4 cycles at 11/11 bits (assumed: the paper gives no converter cycle count; as in the LJ table), scaled with table size by CACTI 7: only the table-read share 5/28 (Parhami 2020 section 4.2) scales. fcvt.lns.* reads the log table, fcvt.lu.lns the exp table","Guess, scaled by CACTI",1-8; CACTI scaling 3.66 (6 bits) to 6.26 (16 bits)
+lpow,"L0, L1, LK (1 per root)",8 at 11/11 bits,"8 cycles at 11/11 bits (derived): exp-table stage 4 (same work as an LNS->int convert) + log(x)*y multiply 4 (= LJ's lpown). Scaled with exp-table size by CACTI 7: only the exp-table stage's read share 5/28 (Parhami 2020 section 4.2) scales, the multiply does not","Derived, scaled by CACTI",5-16; CACTI scaling 7.66 (6 bits) to 10.26 (16 bits); L1 still beats integer up to ~84
+ldiv,"L2, LDK; setup of L1/LK",1,"Table 3, ELM divide",From paper,
+"llw, lsw",setup only (building 1/k),1,"Same core for every format (ELM: load 1, store 2)",Assumption,
+fadd.d,"F0, FK",4,"Table 3, TMS320C6711 add (an FP32 chip, used for FP64)",From paper,
+fmul.d,"F0, FK",4,"Table 3, TMS320C6711 multiply",From paper,
+fdiv.d,"F0, FK (3 per root)",30,"Table 3, TMS320C6711 divide (~30)",From paper,
+fsqrt.d,FS (k = 2 only),40,"Table 3, TMS320C6711 square root (~40)",From paper,
+"fcvt.d.lu, fcvt.lu.d","F0, FK",4,Taken equal to the TMS add pipeline,Guess,
+"fmv.x.d, fmv.d.x",F0,1,Register move,Assumption,

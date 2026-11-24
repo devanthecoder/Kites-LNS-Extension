@@ -1,0 +1,7 @@
+k,variant,input_set,kind,log_bits,exp_bits,instr_per_root,A_cycles_low,A_cycles_fixed,A_cycles_high,B_ns_low,B_ns_fixed,B_ns_high,lns_convert_cycles,lns_pow_cycles,fixup_steps_max,fixup_steps_mean,pct_exact,note
+3,B0,uniform_bits,default,11,11,46.332,56.34,69.09,112.77,328.4,343.0,357.5,,,,,,"ESTIMATE: Parhami 2020 Tables 1/3 + assumptions (convert, lpow latency); serial sum, no pipelining"
+3,B1,uniform_bits,default,11,11,62.307,89.32,116.06,207.75,620.3,650.9,681.5,,,,,,"ESTIMATE: Parhami 2020 Tables 1/3 + assumptions (convert, lpow latency); serial sum, no pipelining"
+3,L0,uniform_bits,default,11,11,9.000,13.00,22.00,38.00,90.0,160.0,288.0,,,,,,"ESTIMATE: Parhami 2020 Tables 1/3 + assumptions (convert, lpow latency); serial sum, no pipelining"
+3,L1,uniform_bits,default,11,11,18.230,30.59,39.59,55.59,244.0,314.0,442.0,,,,,,"ESTIMATE: Parhami 2020 Tables 1/3 + assumptions (convert, lpow latency); serial sum, no pipelining"
+3,L2,uniform_bits,default,11,11,24.511,34.51,40.51,48.51,272.0,318.0,382.0,,,,,,"ESTIMATE: Parhami 2020 Tables 1/3 + assumptions (convert, lpow latency); serial sum, no pipelining"
+3,F0,uniform_bits,default,11,11,36.511,175.51,175.51,175.51,714.0,747.0,780.0,,,,,,"ESTIMATE: Parhami 2020 Tables 1/3 + assumptions (convert, lpow latency); serial sum, no pipelining"

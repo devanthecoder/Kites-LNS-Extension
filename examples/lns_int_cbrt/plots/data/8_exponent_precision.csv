@@ -1,0 +1,12 @@
+exp_bits,rel_error_of_1_3,predicted_worst_fixup,measured_worst_fixup,source
+6,1.435413e-05,560.834,597,"predicted: lns_cbrt_accuracy --yerr; measured: model_grid.csv, log 23 bits, max over 7 input sets"
+7,1.530163e-06,59.785,71,"predicted: lns_cbrt_accuracy --yerr; measured: model_grid.csv, log 23 bits, max over 7 input sets"
+8,6.133923e-07,23.966,28,"predicted: lns_cbrt_accuracy --yerr; measured: model_grid.csv, log 23 bits, max over 7 input sets"
+9,1.555309e-07,6.077,8,"predicted: lns_cbrt_accuracy --yerr; measured: model_grid.csv, log 23 bits, max over 7 input sets"
+10,-7.322524e-08,2.861,3,"predicted: lns_cbrt_accuracy --yerr; measured: model_grid.csv, log 23 bits, max over 7 input sets"
+11,-7.322524e-08,2.861,3,"predicted: lns_cbrt_accuracy --yerr; measured: model_grid.csv, log 23 bits, max over 7 input sets"
+12,-7.357448e-08,2.875,3,"predicted: lns_cbrt_accuracy --yerr; measured: model_grid.csv, log 23 bits, max over 7 input sets"
+13,-7.357448e-08,2.875,3,"predicted: lns_cbrt_accuracy --yerr; measured: model_grid.csv, log 23 bits, max over 7 input sets"
+14,-7.357448e-08,2.875,3,"predicted: lns_cbrt_accuracy --yerr; measured: model_grid.csv, log 23 bits, max over 7 input sets"
+15,-7.357448e-08,2.875,3,"predicted: lns_cbrt_accuracy --yerr; measured: model_grid.csv, log 23 bits, max over 7 input sets"
+16,-7.357448e-08,2.875,3,"predicted: lns_cbrt_accuracy --yerr; measured: model_grid.csv, log 23 bits, max over 7 input sets"

@@ -2,14 +2,15 @@
 # Builds the final-submission zip, CO24BTECH11006_ES24BTECH11030_KITES_LNS.zip:
 #   README.md        tools/submission_README.md (how to build, test and run everything)
 #   LNS_CHANGES.md   files added / changed relative to the upstream KITES we started from
-#   report/          the report PDF given as REPORT
+#   report/          the report PDF given as REPORT, and the demo video given as DEMO
 #   code/            `git archive` of a commit (default HEAD), without docs/LNS_PPT_CONTEXT.md
 #
 # Only committed files go into code/, so commit (and ideally tag) first.
 # Usage (from anywhere inside the repo):
-#   REPORT=/path/to/report.pdf tools/make_submission.sh [ref]
+#   REPORT=/path/to/report.pdf DEMO=/path/to/demo.mp4 tools/make_submission.sh [ref]
 # Environment:
 #   REPORT      the report PDF, copied into report/ (without it the zip has no report: test only)
+#   DEMO        a screen recording of the simulator, copied into report/demo.<ext> (optional)
 #   OUT         output zip (default: <repo>/../CO24BTECH11006_ES24BTECH11030_KITES_LNS.zip)
 set -euo pipefail
 
@@ -59,6 +60,10 @@ if [[ -n "${REPORT:-}" ]]; then
     cp "$REPORT" "$ROOT/report/"
 else
     echo "warning: REPORT not set, the zip has no report" >&2
+fi
+if [[ -n "${DEMO:-}" ]]; then
+    [[ -f "$DEMO" ]] || { echo "DEMO not found: $DEMO" >&2; exit 1; }
+    cp "$DEMO" "$ROOT/report/demo.${DEMO##*.}"
 fi
 [[ -n "$(ls -A "$ROOT/report")" ]] || rmdir "$ROOT/report"
 

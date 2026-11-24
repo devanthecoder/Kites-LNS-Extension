@@ -12,7 +12,7 @@ arithmetic on a floating-point application (Lennard-Jones molecular dynamics) an
 
 | Path | What it is |
 | --- | --- |
-| `report/` | The final report (PDF, plus its LaTeX source) |
+| `report/` | The final report (PDF) |
 | `code/` | The full repository at commit `@COMMIT@`: KITES with the LNS extension, tests, tools, benchmarks and their committed results |
 | `LNS_CHANGES.md` | Every file we added or changed relative to the upstream KITES we started from |
 

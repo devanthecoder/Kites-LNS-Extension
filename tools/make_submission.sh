@@ -2,14 +2,14 @@
 # Builds the final-submission zip, CO24BTECH11006_ES24BTECH11030_KITES_LNS.zip:
 #   README.md        tools/submission_README.md (how to build, test and run everything)
 #   LNS_CHANGES.md   files added / changed relative to the upstream KITES we started from
-#   report/          the report files given as REPORT_DIR (PDF + LaTeX source)
+#   report/          the report PDF given as REPORT
 #   code/            `git archive` of a commit (default HEAD), without docs/LNS_PPT_CONTEXT.md
 #
 # Only committed files go into code/, so commit (and ideally tag) first.
 # Usage (from anywhere inside the repo):
-#   REPORT_DIR=/path/to/report tools/make_submission.sh [ref]
+#   REPORT=/path/to/report.pdf tools/make_submission.sh [ref]
 # Environment:
-#   REPORT_DIR  folder whose files go into report/ (without it the zip has no report: test only)
+#   REPORT      the report PDF, copied into report/ (without it the zip has no report: test only)
 #   OUT         output zip (default: <repo>/../CO24BTECH11006_ES24BTECH11030_KITES_LNS.zip)
 set -euo pipefail
 
@@ -54,11 +54,11 @@ sed "s/@COMMIT@/$SHORT/g" "$ROOT/code/tools/submission_README.md" > "$ROOT/READM
 } > "$ROOT/LNS_CHANGES.md"
 
 # report/
-if [[ -n "${REPORT_DIR:-}" ]]; then
-    [[ -d "$REPORT_DIR" ]] || { echo "REPORT_DIR not found: $REPORT_DIR" >&2; exit 1; }
-    cp -r "$REPORT_DIR"/. "$ROOT/report/"
+if [[ -n "${REPORT:-}" ]]; then
+    [[ -f "$REPORT" ]] || { echo "REPORT not found: $REPORT" >&2; exit 1; }
+    cp "$REPORT" "$ROOT/report/"
 else
-    echo "warning: REPORT_DIR not set, report/ is empty" >&2
+    echo "warning: REPORT not set, the zip has no report" >&2
 fi
 [[ -n "$(ls -A "$ROOT/report")" ]] || rmdir "$ROOT/report"
 
